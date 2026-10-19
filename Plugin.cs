@@ -55,6 +55,45 @@ public static class InterfaceAwakePatch {
             }
         });
 
+		UiKit.Window(w => {
+			w.Size(400, 320).Position(80, 80).Draggable();
+
+			var body = w.Body;
+			body.Label("Settings").FixedH(24);
+
+			body.Vertical(v => {
+				v.Label("Option A");
+				v.Label("Option B");
+				v.Label("Option C");
+			}).WeightH(1).Spacing(4);
+
+			body.Horizontal(row => {
+				row.Button("Apply",  null);
+				row.Button("Cancel", null);
+			}).FixedH(32);
+		}).Draggable();
+
+		UiKit.Window(w => {
+			w.Body.Horizontal(h => {
+				h.Vertical(left => {
+					left.Label("Menu");
+					left.Button("Home", null);
+					left.Button("Settings", null);
+				}).FixedW(140).WeightH(1);
+
+				h.Vertical(right => {
+					right.Label("Content area");
+				}).WeightW(1).WeightH(1);
+			}).WeightH(1);
+		}).Draggable();
+
+		UiKit.Window(w => {
+			w.Body.Grid(g => {
+				for (int i = 0; i < 9; i++)
+					g.Button($"{i}", null);
+			}).Columns(3).CellSize(80, 80).WeightH(1);
+		}).Draggable().Size(300,300);
+
     }
 }
 

@@ -115,10 +115,10 @@ internal sealed class WindowView {
 
 	private WindowView() { }
 
-	public static WindowView Create(Transform canvas, WindowHandle owner) {
+	public static WindowView Create(Transform canvas) {
 		var v = new WindowView();
 		v.BuildRoot(canvas);
-		v.BuildBody(owner);
+		v.BuildBody();
 		v.BuildOrnament();
 		return v;
 	}
@@ -138,7 +138,7 @@ internal sealed class WindowView {
 		else bg.color = new Color(0.12f, 0.10f, 0.08f, 0.98f);
 	}
 
-	private void BuildBody(WindowHandle owner) {
+	private void BuildBody() {
 		BodyArea = UiFactory.NewRect("Body", Root);
 		BodyArea.anchorMin = Vector2.zero;
 		BodyArea.anchorMax = Vector2.one;
@@ -146,15 +146,15 @@ internal sealed class WindowView {
 		BodyArea.offsetMax = new Vector2(-WindowHandle.Padding, -WindowHandle.Padding);
 
 		var vlg = BodyArea.gameObject.AddComponent<VerticalLayoutGroup>();
-		vlg.childAlignment = TextAnchor.UpperLeft;
-		vlg.childControlWidth = true;
-		vlg.childControlHeight = true;
+		vlg.childAlignment        = TextAnchor.UpperLeft;
+		vlg.childControlWidth     = true;
+		vlg.childControlHeight    = true;
 		vlg.childForceExpandWidth = true;
 		vlg.childForceExpandHeight = false;
-		vlg.spacing = 6f;
-		vlg.padding = new RectOffset(0, 0, 0, 0);
+		vlg.spacing               = 6f;
+		vlg.padding               = new RectOffset(0, 0, 0, 0);
 
-		Body = new ContainerHandle(BodyArea, owner);
+		Body = new ContainerHandle(BodyArea);
 	}
 
 	private void BuildOrnament() {
@@ -240,7 +240,7 @@ public sealed class WindowHandle {
 
 	internal static WindowHandle Create(Transform canvas) {
 		var h = new WindowHandle();
-		h._view = WindowView.Create(canvas, h);
+		h._view = WindowView.Create(canvas);
 		h.ApplyLayout();
 		return h;
 	}
