@@ -3,16 +3,22 @@ using System;
 namespace DiceModders.UiKit;
 
 public static class UiKit {
-    public static WindowHandle Window(string title, Action<WindowHandle> build = null) {
-        var canvas = UIRoot.Root;
-        if (canvas == null) Plugin.Log.LogError("No canvas available");
+	private static int _nextId;
 
-        var handle = WindowHandle.Create(title, canvas.transform);
+    public static WindowHandle Window(Action<WindowHandle> build = null) {
+        var canvas = UiRoot.Root;
+        if (canvas == null) {
+            Plugin.Log.LogError("UiKit.Window: no canvas available");
+            throw new InvalidOperationException("No canvas available");
+        }
+
+        int id = ++_nextId;
+        var handle = WindowHandle.Create(canvas.transform);
         try {
             build?.Invoke(handle);
         }
         catch (Exception e) {
-            Plugin.Log.LogError($"Window '{title}' build failed: {e}");
+            Plugin.Log.LogError($"Window #{id} build failed: {e}");
             handle.Close();
             throw;
         }

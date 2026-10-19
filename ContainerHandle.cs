@@ -15,7 +15,7 @@ public sealed class ContainerHandle {
 	}
 
     public LabelHandle Label(string text, float fontSize = 16f) {
-        var rt = WindowHandle.NewRect("Label", Root);
+        var rt = UiFactory.NewRect("Label", Root);
         var tmp = rt.gameObject.AddComponent<TextMeshProUGUI>();
         var font = Assets.Font;
         if (font != null) tmp.font = font;
@@ -35,7 +35,7 @@ public sealed class ContainerHandle {
     }
 
     public ButtonHandle Button(string text, Action onClick, float fontSize = 16f) {
-        var rt = WindowHandle.NewRect("Button", Root);
+        var rt = UiFactory.NewRect("Button", Root);
 
         var bg = rt.gameObject.AddComponent<Image>();
         var normal = Assets.ButtonBg(Assets.ButtonVariant.Regular, Assets.ButtonState.Ready);
@@ -61,14 +61,14 @@ public sealed class ContainerHandle {
             btn.spriteState = st;
         }
 
-        WindowHandle.AttachClick(btn, onClick);
+        UiFactory.AttachClick(btn, onClick);
 
         var le = rt.gameObject.AddComponent<LayoutElement>();
         le.preferredHeight = 30f;
         le.flexibleWidth = 1f;
 
-        var label = WindowHandle.MakeText(rt, "Label", text ?? "", fontSize, TextAlignmentOptions.Center);
-        WindowHandle.Stretch(label.rectTransform);
+        var label = UiFactory.MakeText(rt, "Label", text ?? "", fontSize, TextAlignmentOptions.Center);
+        UiFactory.Stretch(label.rectTransform);
 
         return new ButtonHandle(rt, bg, label);
     }
