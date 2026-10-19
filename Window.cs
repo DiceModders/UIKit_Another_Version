@@ -166,20 +166,20 @@ internal sealed class WindowView {
         OrnamentImage.raycastTarget = false;
         OrnamentImage.enabled = false;
 
-		SetOrnament(true, 3);
+		SetOrnament(Assets.OrnamentStyle.Border);
     }
 
-	public void SetOrnament(bool on, int style) {
+	public void SetOrnament(Assets.OrnamentStyle style) {
         if (OrnamentImage == null) return;
 
-        if (!on) {
+        if (style==Assets.OrnamentStyle.None) {
             OrnamentImage.enabled = false;
             return;
         }
 
         var sprite = Assets.Ornament(style);
         if (sprite == null) {
-            Plugin.Log?.LogWarning($"Ornament-{style} not found, ornament disabled");
+            Plugin.Log?.LogWarning($"Ornament {style} not found, ornament disabled");
             OrnamentImage.enabled = false;
             return;
         }
@@ -221,8 +221,7 @@ public sealed class WindowHandle {
 	private bool _positioned;
 	private bool _draggable, _fullscreenable;
 	private bool _closed;
-	private int  _ornamentStyle   = 3;
-    private bool _ornamentEnabled = true;
+	private Assets.OrnamentStyle _ornamentStyle = Assets.OrnamentStyle.Border;
 
 	private WindowState _state = WindowState.Normal;
 	private Vector2 _normalAnchoredPosition, _normalSizeDelta;
@@ -232,11 +231,10 @@ public sealed class WindowHandle {
 	public ContainerHandle Body   => _view?.Body;
 	public RectTransform BodyArea => _view?.BodyArea;
 
-	public WindowState State         => _state;
-	public bool CanToggleFullscreen  => _fullscreenable;
-	public bool IsOpen               => !_closed && _view?.Root != null && _view.Root.gameObject != null;
-	public bool HasOrnament          => _ornamentEnabled;
-    public int  OrnamentStyle        => _ornamentStyle;
+	public WindowState State                  => _state;
+	public bool CanToggleFullscreen           => _fullscreenable;
+	public bool IsOpen                        => !_closed && _view?.Root != null && _view.Root.gameObject != null;
+    public Assets.OrnamentStyle OrnamentStyle => _ornamentStyle;
 
 	private WindowHandle() { }
 
@@ -274,16 +272,9 @@ public sealed class WindowHandle {
 		return this;
 	}
 
-	public WindowHandle Ornament(bool on = true) {
-        _ornamentEnabled = on;
-        _view?.SetOrnament(on, _ornamentStyle);
-        return this;
-    }
-
-    public WindowHandle Ornament(int style) {
+    public WindowHandle Ornament(Assets.OrnamentStyle style = Assets.OrnamentStyle.Border) {
         _ornamentStyle   = style;
-        _ornamentEnabled = true;
-        _view?.SetOrnament(true, style);
+        _view?.SetOrnament(style);
         return this;
     }
 

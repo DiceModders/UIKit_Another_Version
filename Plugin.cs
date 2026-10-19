@@ -27,20 +27,34 @@ public static class InterfaceAwakePatch {
 		});
 
 		var w2 = UiKit.Window(w => {
-			w.Size(360, 240).Draggable().Fullscreenable().Ornament(2);
+			w.Size(360, 240).Draggable().Fullscreenable();
 
 			w.Body.Label("Test minimize / fullscreen");
 			w.Body.Button("Fullscreen", () => w.Fullscreen());
 		});
 
-		var w3 = UiKit.Window(w => {
-			int ornament = 1;
-			w.Size(280, 160).Draggable().Ornament(ornament);
+		UiKit.Window(w => {
+            w.Size(340, 340).Position(80, 80).Draggable() .Ornament(Assets.OrnamentStyle.None);
 
-			var ornamentLable = w.Body.Label($"Ornament: {ornament}");
-			w.Body.Button("Previous ornament", () => {ornament-=1; w.Ornament(ornament); ornamentLable.SetText($"Ornament: {ornament}");});
-			w.Body.Button("Next ornament", () => {ornament+=1; w.Ornament(ornament); ornamentLable.SetText($"Ornament: {ornament}");});
-		});
+            var body = w.Body;
+            var currentLabel = body.Label("Current: Ornament1");
+
+            var styles = new[] {
+				Assets.OrnamentStyle.None, 
+				Assets.OrnamentStyle.Border, 
+				Assets.OrnamentStyle.BorderWithTwoCorners, 
+				Assets.OrnamentStyle.BorderWithFourCorners
+            };
+
+            foreach (var style in styles) {
+                var s = style;
+                body.Button(style.ToString(), () => {
+                    w.Ornament(s);
+                    currentLabel.SetText($"Current: {s}");
+                });
+            }
+        });
+
     }
 }
 

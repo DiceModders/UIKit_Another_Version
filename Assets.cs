@@ -70,7 +70,14 @@ public static class Assets {
     public static Sprite ButtonBg(ButtonVariant v, ButtonState s) => GetSprite($"Button-{(int)v}-{s}");
 
     public static Sprite PanelBg() => GetSprite("Background-3") ?? GetSprite("Background-4");
-    public static Sprite Ornament(int style = 3) => GetSprite($"Ornament-{style}");
+
+	public enum OrnamentStyle { None = 0, Border, BorderWithTwoCorners, BorderWithFourCorners }
+	public static Sprite Ornament(OrnamentStyle style) => style switch {
+		OrnamentStyle.Border                => GetSprite("Ornament-1"),
+		OrnamentStyle.BorderWithTwoCorners  => GetSprite("Ornament-2"),
+		OrnamentStyle.BorderWithFourCorners => GetSprite("Ornament-5"),
+		_                                   => null,
+	};
 
     public static TMP_FontAsset Font => GetFont("Main-Font-Normal") ?? FontFromLive();
     public static Material FontShadowMaterial => GetMaterial("Main-Font-Normal-Shadow");
