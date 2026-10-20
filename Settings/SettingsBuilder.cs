@@ -10,6 +10,31 @@ namespace DiceModders.UiKit;
 /// <summary>Creates single settings rows from the game's own row prefabs (entry = label + content holder, header).</summary>
 internal static class SettingsBuilder {
 	private const float StepButtonWidth = 32f;
+
+	/// <summary>Distance from the left edge of a content column to where the game's own controls start (measured from a native row; the game's controls are inset).</summary>
+	public static float ContentLeft;
+
+	public static void MeasureContentLeft(GameSetInterface set) {
+		ContentLeft = 0f;
+		try {
+			var holder = set.holder;
+			LayoutRebuilder.ForceRebuildLayoutImmediate(holder);
+			for (int i = 0; i < holder.childCount; i++) {
+				var row = holder.GetChild(i);
+				if (row == null || row.name.StartsWith("DM")) continue;
+				var entry = row.GetComponent<GameEntry>();
+				var column = entry != null ? entry.contentHolder : null;
+				if (column == null) continue;
+				for (int j = 0; j < column.childCount; j++) {
+					var k = column.GetChild(j) as RectTransform;
+					if (k == null || !k.gameObject.activeInHierarchy) continue;
+					float left = column.InverseTransformPoint(k.TransformPoint(new Vector3(k.rect.xMin, 0f, 0f))).x - column.rect.xMin;
+					if (left >= 0f && left < 400f) { ContentLeft = left; UiLog.Once("contentleft", $"settings: native controls start {left:0.#} units into the content column"); return; }
+				}
+			}
+		}
+		catch (Exception e) { UiLog.Once("contentleft:err", "settings: could not measure native rows: " + e.Message); }
+	}
 	private const float ValueWidth = 64f;
 
 	public static void AddHeader(GameSetInterface set, string name, string text) {
@@ -29,9 +54,9 @@ internal static class SettingsBuilder {
 		label.enableWordWrapping = true;
 		var rt = label.rectTransform;
 		rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-		rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
+		rt.offsetMin = new Vector2(ContentLeft, 0f); rt.offsetMax = Vector2.zero;
 
-		float width = holder.rect.width > 50f ? holder.rect.width : 420f;
+		float width = (holder.rect.width > 50f ? holder.rect.width : 420f) - ContentLeft;
 		float height = label.GetPreferredValues(text ?? "", width, 0f).y + 8f;
 		var le = entry.GetComponent<LayoutElement>() ?? entry.gameObject.AddComponent<LayoutElement>();
 		le.minHeight = Mathf.Max(le.minHeight, height);
@@ -112,6 +137,7 @@ internal static class SettingsBuilder {
 		h.childControlWidth = false; h.childControlHeight = false;
 		h.childForceExpandWidth = false; h.childForceExpandHeight = false;
 		h.spacing = 6f;
+		h.padding = new RectOffset((int)ContentLeft, 0, 0, 0);
 	}
 
 	private static void Rebuild(GameSetInterface set) {

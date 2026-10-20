@@ -14,7 +14,12 @@ sounds and cursor changes, so mod UI looks and behaves like the game. Several mo
 1. Link the game's interop assemblies once: `scripts\link-interop.ps1 "E:\SteamLibrary\steamapps\common\Dice-Kingdoms"` (creates `interop/`, which is git-ignored).
 2. `dotnet build -c Release`, copy `DiceModders.UiKit.dll` to `BepInEx/plugins`.
 3. In your mod: reference `DiceModders.UiKit.dll` and add `[BepInDependency("<UiKit plugin guid>")]` (the guid is `MyPluginInfo.PLUGIN_GUID`, generated from the assembly name).
-4. Demo content (windows, a top bar button, a "UiKit demo" settings block) is controlled by `BepInEx/config/*UiKit*.cfg` -> `[Demo] Enabled`. Turn it off on release setups.
+4. Demo content (windows, a top bar button, a "UiKit demo" settings block) is controlled by `BepInEx/config/*UiKit*.cfg` -> `[Demo] Enabled`. It is off by default; set it to `true` to see the demo.
+
+## For mod authors / Thunderstore
+
+UiKit is its own BepInEx plugin. Publish it as a separate Thunderstore package and list it in your mod's `manifest.json` `dependencies`; mod managers then install it
+automatically. In code add `[BepInDependency(UiKit plugin GUID)]` so UiKit loads first. Do not copy the DLL into your own package (two copies would both patch the game).
 
 ## Windows
 
