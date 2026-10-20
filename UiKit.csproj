@@ -21,7 +21,9 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <Reference Include="interop/*.dll" />
+	  <Reference Include="interop/*.dll">
+		  <Private>false</Private>
+	  </Reference>
   </ItemGroup>
 
 </Project>

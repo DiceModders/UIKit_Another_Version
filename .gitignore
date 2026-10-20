@@ -1,0 +1,5 @@
+interop/
+bin/
+obj/
+.vs/
+*.user

@@ -14,6 +14,8 @@ public enum WindowState {
 }
 
 internal sealed class WindowDragHandler : MonoBehaviour {
+	public WindowDragHandler(IntPtr ptr) : base(ptr) { }
+
 	public RectTransform WindowRoot;
 	public WindowHandle Owner;
 	public float ClampMinVisible = 8f;
@@ -124,7 +126,7 @@ internal sealed class WindowView {
 	}
 
 	private void BuildRoot(Transform canvas) {
-		Root = UiFactory.NewRect("Window", canvas);
+		Root = UiFactory.NewRect("DM Window", canvas);   // "DM " prefix: template searches never pick our own objects
 		Root.anchorMin = Root.anchorMax = new Vector2(0f, 1f);
 		Root.pivot = new Vector2(0f, 1f);
 
@@ -139,7 +141,7 @@ internal sealed class WindowView {
 	}
 
 	private void BuildBody() {
-		BodyArea = UiFactory.NewRect("Body", Root);
+		BodyArea = UiFactory.NewRect("DM Body", Root);
 		BodyArea.anchorMin = Vector2.zero;
 		BodyArea.anchorMax = Vector2.one;
 		BodyArea.offsetMin = new Vector2(WindowHandle.Padding, WindowHandle.Padding);
@@ -158,7 +160,7 @@ internal sealed class WindowView {
 	}
 
 	private void BuildOrnament() {
-        var rt = UiFactory.NewRect("Ornament", Root);
+        var rt = UiFactory.NewRect("DM Ornament", Root);
         UiFactory.Stretch(rt);
 
         OrnamentImage = rt.gameObject.AddComponent<Image>();

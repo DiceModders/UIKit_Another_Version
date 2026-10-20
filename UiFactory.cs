@@ -16,7 +16,7 @@ public static class UiFactory {
 		return types;
 	}
 
-	public static RectTransform NewRect(string name, Transform parent) {
+	public static RectTransform NewRect(string name, Transform parent) {   // parent may be any Transform (RectTransform included)
 		var go = new GameObject(name, RtTypes);
 		var rt = go.GetComponent<RectTransform>();
 
@@ -25,20 +25,8 @@ public static class UiFactory {
 		return rt;
 	}
 
-	public static TextMeshProUGUI MakeText(RectTransform parent, string name, string text, float size, TextAlignmentOptions align) {
-		var rt = NewRect(name, parent);
-		var tmp = rt.gameObject.AddComponent<TextMeshProUGUI>();
-		var font = Assets.Font;
-		if (font != null) tmp.font = font;
-		var mat = Assets.FontShadowMaterial;
-		if (mat != null) tmp.fontSharedMaterial = mat;
-		tmp.text = text;
-		tmp.fontSize = size;
-		tmp.alignment = align;
-		tmp.color = new Color(0.969f, 0.940f, 0.893f, 1f);
-		tmp.raycastTarget = false;
-		return tmp;
-	}
+	public static TextMeshProUGUI MakeText(RectTransform parent, string name, string text, float size, TextAlignmentOptions align)
+		=> NativeText.Create(parent, name, text, size, align);
 
 	public static void Stretch(RectTransform rt) {
         rt.anchorMin = Vector2.zero;
@@ -53,7 +41,7 @@ public static class UiFactory {
             btn.onClick.AddListener(DelegateSupport.ConvertDelegate<UnityAction>(action));
         }
         catch (System.Exception e) {
-            Plugin.Log.LogError($"AttachClick failed: {e}");
+            UiLog.Error($"AttachClick failed: {e}");
         }
     }
 }
