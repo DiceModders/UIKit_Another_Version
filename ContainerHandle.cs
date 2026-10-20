@@ -44,6 +44,7 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 			return LegacyButton(icon != null ? "*" : "?", onClick, 16f).Fixed(NativeButton.SlicedFit);
 		}
 		var handle = new ButtonHandle(native.Rt, native.Face, null, native.UnityButton, native);
+		native.FitIcon(NativeButton.SlicedFit);
 		handle.Fixed(NativeButton.SlicedFit);
 		return handle;
 	}

@@ -27,7 +27,7 @@ internal static class SettingsHook {
 			if (__instance == null || __instance.holder == null) return;
 			if (!TryGetTab(__instance, out var tab)) return;
 			var regs = SettingsRegistry.For(tab);
-			if (regs.Count == 0) return;
+			if (regs.Count == 0) { SettingsCloseShift.Update(__instance, false); return; }
 
 			RemoveOld(__instance);
 			int n = 0;
@@ -40,6 +40,7 @@ internal static class SettingsHook {
 				catch (Exception e) { UiLog.Error($"settings block '{reg.Title}' failed: {e}"); }
 			}
 			UnityEngine.UI.LayoutRebuilder.MarkLayoutForRebuild(__instance.holder);
+			SettingsCloseShift.Update(__instance, true);
 		}
 		catch (Exception e) { UiLog.Once("settings:hook", "settings hook: " + e); }
 	}

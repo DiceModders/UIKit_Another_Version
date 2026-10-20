@@ -37,6 +37,9 @@ internal sealed class NativeButton {
 
 	public bool Selected { get; private set; } = true;
 
+	/// <summary>Edge length (in units) the donor icon button was designed for; used to scale the icon when a clone is made smaller or larger.</summary>
+	private float _designSize = 0f;
+
 	private Image _dim;
 	private GameButton.State _state = GameButton.State.READY;
 	private bool _stateEvents;
@@ -74,6 +77,8 @@ internal sealed class NativeButton {
 		if (template == null) return null;
 		var nb = Clone(template, parent, name, tooltip);
 		if (nb == null) return null;
+		var templateRect = template.GetComponent<RectTransform>();
+		if (templateRect != null) nb._designSize = Mathf.Min(templateRect.rect.width, templateRect.rect.height);
 		nb.SetIcon(icon);
 		nb.SetClick(click);
 		return nb;
@@ -150,6 +155,21 @@ internal sealed class NativeButton {
 		var top = Go.transform.Find("Top/Icon");
 		var image = top != null ? top.GetComponent<Image>() : null;
 		if (image != null) image.sprite = sprite;
+	}
+
+	/// <summary>
+	/// Scales the icon with the button. The donor's icon has a fixed size made for the donor's own button size, so in a smaller button it would stick out
+	/// of the frame. Does nothing for icons that already stretch with their button.
+	/// </summary>
+	public void FitIcon(float buttonSize) {
+		if (Go == null || _designSize < 1f) return;
+		var icon = Go.transform.Find("Top/Icon") ?? Go.GetComponentInChildren<GameButtonIcon>(true)?.transform;
+		var rt = icon != null ? icon.GetComponent<RectTransform>() : null;
+		if (rt == null) return;
+		UiLog.Once("icongeo", $"icon button geometry: design={_designSize:0.#} anchors={rt.anchorMin}-{rt.anchorMax} size={rt.rect.size} -> button {buttonSize:0.#}");
+		if (rt.anchorMin != rt.anchorMax) return;   // stretches with the button already
+		float factor = Mathf.Clamp(buttonSize / _designSize, 0.25f, 4f);
+		rt.localScale = new Vector3(factor, factor, 1f);
 	}
 
 	public void SetTooltip(string text) {

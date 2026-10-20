@@ -10,7 +10,7 @@ namespace DiceModders.UiKit;
 /// <summary>Creates single settings rows from the game's own row prefabs (entry = label + content holder, header).</summary>
 internal static class SettingsBuilder {
 	private const float StepButtonWidth = 32f;
-	private const float ValueWidth = 90f;
+	private const float ValueWidth = 64f;
 
 	public static void AddHeader(GameSetInterface set, string name, string text) {
 		var prefab = set.headerPrefab;
@@ -20,18 +20,23 @@ internal static class SettingsBuilder {
 		SetLabel(header.visual, text);
 	}
 
+	/// <summary>A wrapped paragraph in the content column of a normal row (empty label), so it lines up with the game's own controls.</summary>
 	public static void AddInfo(GameSetInterface set, string name, string text) {
-		var prefab = set.headerPrefab;
-		if (prefab == null) return;
-		var info = UnityEngine.Object.Instantiate(prefab, set.holder);
-		info.gameObject.name = name;
-		SetLabel(info.visual, text);
-		if (info.visual != null) {
-			info.visual.enableWordWrapping = true;
-			info.visual.alignment = TextAlignmentOptions.TopLeft;
-		}
-		var le = info.GetComponent<LayoutElement>();
-		if (le != null) { le.preferredWidth = -1; le.minWidth = -1; le.flexibleWidth = 1; }
+		var entry = NewEntry(set, name, "");
+		if (entry == null) return;
+		var holder = entry.contentHolder;
+		var label = NativeText.Create(holder, name + " Text", text, 16f, TextAlignmentOptions.TopLeft);
+		label.enableWordWrapping = true;
+		var rt = label.rectTransform;
+		rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+		rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
+
+		float width = holder.rect.width > 50f ? holder.rect.width : 420f;
+		float height = label.GetPreferredValues(text ?? "", width, 0f).y + 8f;
+		var le = entry.GetComponent<LayoutElement>() ?? entry.gameObject.AddComponent<LayoutElement>();
+		le.minHeight = Mathf.Max(le.minHeight, height);
+		le.preferredHeight = Mathf.Max(le.preferredHeight, height);
+		Rebuild(set);
 	}
 
 	public static void AddToggle(GameSetInterface set, string name, string label, Func<bool> get, Action<bool> setValue) {
@@ -103,7 +108,7 @@ internal static class SettingsBuilder {
 	private static void EnsureRow(RectTransform holder) {
 		if (holder == null || holder.GetComponent<HorizontalOrVerticalLayoutGroup>() != null) return;
 		var h = holder.gameObject.AddComponent<HorizontalLayoutGroup>();
-		h.childAlignment = TextAnchor.MiddleRight;
+		h.childAlignment = TextAnchor.MiddleLeft;   // the game's own controls start at the left edge of the content column
 		h.childControlWidth = false; h.childControlHeight = false;
 		h.childForceExpandWidth = false; h.childForceExpandHeight = false;
 		h.spacing = 6f;

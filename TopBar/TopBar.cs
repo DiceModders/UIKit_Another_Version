@@ -23,6 +23,7 @@ public sealed class TopBarButton {
 	internal int Order { get; }
 	internal int Sequence { get; }
 	internal Sprite IconSprite;
+	internal string IconName;
 	internal string Tip;
 	internal Action Click;
 	internal bool Visible = true;
@@ -86,9 +87,10 @@ public static partial class UiKit {
 
 		/// <summary>Adds a button. <paramref name="icon"/> is the name of one of the game's sprites (see <see cref="Assets.SpriteNames"/>).</summary>
 		public static TopBarButton Add(string id, string icon, Action onClick, string tooltip = null, int order = 0) {
-			var sprite = string.IsNullOrEmpty(icon) ? null : Assets.GetSprite(icon);
-			if (sprite == null && !string.IsNullOrEmpty(icon)) UiLog.Warn($"top bar button '{id}': no game sprite named '{icon}' - using a default icon");
-			return Add(id, sprite, onClick, tooltip, order);
+			// The sprite is looked up when the button is attached (the game's sprites are not loaded yet when a mod registers at startup).
+			var button = Add(id, (Sprite)null, onClick, tooltip, order);
+			if (button.IconName == null) button.IconName = icon;
+			return button;
 		}
 
 		public static TopBarButton Add(string id, Sprite icon, Action onClick, string tooltip = null, int order = 0) {
@@ -139,7 +141,12 @@ public static partial class UiKit {
 
 		private static void Attach(TopBarButton button, Transform bar) {
 			var captured = button;
-			var native = NativeButton.CreateIcon(bar, "DM Bar " + button.Id, button.IconSprite ?? Assets.GetSprite("hammer"), () => captured.Click?.Invoke(), button.Tip);
+			var sprite = button.IconSprite;
+			if (sprite == null && !string.IsNullOrEmpty(button.IconName)) {
+				sprite = Assets.GetSprite(button.IconName);
+				if (sprite == null) UiLog.Once("topbaricon:" + button.IconName, $"top bar button '{button.Id}': no game sprite named '{button.IconName}' - keeping the default icon");
+			}
+			var native = NativeButton.CreateIcon(bar, "DM Bar " + button.Id, sprite, () => captured.Click?.Invoke(), button.Tip);
 			if (native == null) return;   // the template button does not exist yet; retried on the next tick
 			button.Native = native;
 			native.SetVisible(button.Visible);

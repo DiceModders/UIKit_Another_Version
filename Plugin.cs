@@ -128,7 +128,7 @@ public class Plugin : BasePlugin {
 
     public override void Load() {
         Log = base.Log;
-		DemoEnabled = Config.Bind("Demo", "Enabled", true, "Show the demo windows, top bar button and settings rows (turn off when other mods use the library).");
+		DemoEnabled = Config.Bind("Demo", "Enabled", false, "Show the demo windows, top bar button and settings rows (turn off when other mods use the library).");
 		UiKit.Init();
 		if (DemoEnabled.Value) InterfaceAwakePatch.RegisterDemoExtras();
 		var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
