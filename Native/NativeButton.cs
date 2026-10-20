@@ -90,6 +90,16 @@ internal sealed class NativeButton {
 		return nb;
 	}
 
+	/// <summary>The small X button of the game's windows (About, Store ...), cloned with its own icon.</summary>
+	public static NativeButton CreateClose(Transform parent, string name, Action click) {
+		var template = NativeTemplates.CloseIconButton();
+		if (template == null) return null;
+		var nb = Clone(template, parent, name, null);
+		if (nb == null) return null;
+		nb.SetClick(click);
+		return nb;
+	}
+
 	private static NativeButton Clone(GameObject template, Transform parent, string name, string tooltip) {
 		// Parked under an inactive object: the clone's scripts do not run until we move it into the real UI below.
 		var go = UnityEngine.Object.Instantiate(template, Staging.Root);
@@ -132,7 +142,7 @@ internal sealed class NativeButton {
 	}
 
 	/// <summary>Removes leftovers of earlier changes of ours on the donor and anything that would re-localize or re-label the clone.</summary>
-	private static void StripForeign(GameObject go) {
+	internal static void StripForeign(GameObject go) {
 		var t = go.transform;
 		for (int i = t.childCount - 1; i >= 0; i--) {
 			var c = t.GetChild(i);

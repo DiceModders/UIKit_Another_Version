@@ -13,6 +13,7 @@ internal static class Core {
 		Register<WindowDragHandler>();
 		UiKitRunner.Spawn();
 		SettingsHook.Install();
+		RulesHook.Install();
 		UiLog.Info("native UI kit ready");
 	}
 

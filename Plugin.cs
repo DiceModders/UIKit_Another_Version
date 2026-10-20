@@ -2,7 +2,9 @@ using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
+using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.Injection;
+using UnityEngine;
 
 namespace DiceModders.UiKit;
 
@@ -10,6 +12,7 @@ namespace DiceModders.UiKit;
 public static class InterfaceAwakePatch {
     [HarmonyPostfix]
     public static void Postfix() {
+		if (Plugin.DumpWindows.Value) WindowProbe.Dump();
 		if (!Plugin.DemoEnabled.Value) return;
 		Assets.Scan();
 		if (UiRoot.Root==null) {
@@ -93,7 +96,7 @@ public static class InterfaceAwakePatch {
 				for (int i = 0; i < 9; i++)
 					g.Button($"{i}", null);
 			}).Columns(3).CellSize(80, 80).WeightH(1);
-		}).Draggable().Size(300,300);
+		}).Draggable().Size(284,284);   // 3 cells of 80 + 2 gaps of 6 + 2 * 16 padding
 
 		UiKit.Window(w => {
 			w.Size(360, 200).Position(480, 80).Draggable();
@@ -103,6 +106,42 @@ public static class InterfaceAwakePatch {
 				row.IconButton("hammer", () => status.SetText("Icon button"), "Native icon button").FixedW(32);
 				row.Button("Text button", () => status.SetText("Text button"));
 			}).FixedH(32);
+		});
+		UiKit.Window(w => {
+			w.Size(420, 560).Position(520, 60).Draggable().Closable();
+			var b = w.Body;
+			var status = b.Label("Move over / drag on the picture, wheel changes the brush").FixedH(22);
+
+			const int N = 64;
+			var tex = new Texture2D(N, N, TextureFormat.RGBA32, false);
+			for (int y = 0; y < N; y++)
+				for (int x = 0; x < N; x++)
+					tex.SetPixel(x, y, new Color(x / (float)N, y / (float)N, 0.35f, 1f));
+			tex.Apply(false);
+
+			int brush = 2;
+			// A picture is stretched to its rectangle, so give it a size with the texture's proportions: a horizontal row keeps it from being widened.
+			ImageHandle img = null;
+			b.Horizontal(row => { img = row.Image(tex).Filter(FilterMode.Point).Refresh().Fixed(150); }).FixedH(150);
+			img.OnPointer(e => {
+				int px = Mathf.Clamp((int)(e.Uv.x * N), 0, N - 1), py = Mathf.Clamp((int)(e.Uv.y * N), 0, N - 1);
+				if ((e.Kind == PointerKind.Down || e.Kind == PointerKind.Drag) && e.Button == 0) {
+					for (int dy = -brush; dy <= brush; dy++)
+						for (int dx = -brush; dx <= brush; dx++) {
+							int x = px + dx, y = py + dy;
+							if (x >= 0 && y >= 0 && x < N && y < N) tex.SetPixel(x, y, Color.white);
+						}
+					img.Refresh();
+				}
+				if (e.Kind != PointerKind.Exit) status.SetText($"{e.Kind} button {e.Button}  pixel {px},{py}  brush {brush}");
+			});
+			img.OnScroll(n => { brush = Mathf.Clamp(brush + (n > 0 ? 1 : -1), 1, 8); status.SetText($"brush {brush}"); });
+
+			b.Slider(0, 100, 40, v => status.SetText($"Slider {v:0}"), "0");
+			b.Dropdown(new[] { "First", "Second", "Third" }, 1, i => status.SetText($"Dropdown index {i}")).FixedH(32);
+			b.ScrollView(sv => {
+				for (int i = 1; i <= 20; i++) sv.Label($"Scrolling row {i}");
+			}).FixedH(110);
 		});
     }
 	
@@ -121,6 +160,18 @@ public static class InterfaceAwakePatch {
 				s.Toggle($"Extra row {n}", () => flag, v => flag = v);
 			}
 		});
+
+		if (Plugin.DemoRulesScoreboard.Value) {
+			// A scoreboard column that shows the kingdom's name, and a fake civilization (99) in the Rules drop-down that reuses the Europe tech tree.
+			UiKit.Scoreboard.AddColumn("uikit.demo", island => island != null ? island.name : "-", "UiKit demo column");
+			UiKit.Rules.AddCivilization("uikit.demo.civ", "UiKit demo civ", skinsLike: 0, techTree: () => {
+				foreach (var o in Resources.FindObjectsOfTypeAll(Il2CppType.Of<DiceKingdoms.Game.Technologies>())) {
+					var t = o?.TryCast<DiceKingdoms.Game.Technologies>();
+					if (t != null) return t.TechTree(DiceKingdoms.Interface.Civilization.EUROPE);
+				}
+				return null;
+			});
+		}
 	}
 }
 
@@ -130,11 +181,15 @@ public class Plugin : BasePlugin {
     internal static new ManualLogSource Log;
     internal static BepInEx.Configuration.ConfigEntry<bool> DemoEnabled;
     internal static BepInEx.Configuration.ConfigEntry<int> DemoExtraRows;
+    internal static BepInEx.Configuration.ConfigEntry<bool> DumpWindows;
+    internal static BepInEx.Configuration.ConfigEntry<bool> DemoRulesScoreboard;
 
     public override void Load() {
         Log = base.Log;
 		DemoEnabled = Config.Bind("Demo", "Enabled", false, "Show the demo windows, top bar button and settings rows (for testing the library; off by default).");
 		DemoExtraRows = Config.Bind("Demo", "ExtraRows", 0, "Adds this many extra toggle rows to the demo settings block (to test scrolling and the Close button shift).");
+		DemoRulesScoreboard = Config.Bind("Demo", "RulesAndScoreboard", false, "With the demo on: adds a scoreboard column and a fake civilization to the Rules drop-down (the fake civilization may break skins/colours when selected).");
+		DumpWindows = Config.Bind("Debug", "DumpWindows", false, "Writes the object tree of the game's own windows to the log (for developers).");
 		UiKit.Init();
 		if (DemoEnabled.Value) InterfaceAwakePatch.RegisterDemoExtras();
 		var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);

@@ -114,6 +114,8 @@ internal sealed class WindowView {
 	public RectTransform BodyArea { get; private set; }
 	public ContainerHandle Body { get; private set; }
 	public Image OrnamentImage { get; private set; }
+	private RectTransform _frame;
+	private Image _frameOrnament;
 
 	private WindowView() { }
 
@@ -129,6 +131,10 @@ internal sealed class WindowView {
 		Root = UiFactory.NewRect("DM Window", canvas);   // "DM " prefix: template searches never pick our own objects
 		Root.anchorMin = Root.anchorMax = new Vector2(0f, 1f);
 		Root.pivot = new Vector2(0f, 1f);
+
+		// The game's own frame (background + ornament) when it can be found; otherwise the frame is built from the game's sprites.
+		_frame = NativeFrame.Create(Root, out _frameOrnament);
+		if (_frame != null) return;
 
 		var bg = Root.gameObject.AddComponent<Image>();
 		var sprite = Assets.PanelBg();
@@ -160,6 +166,13 @@ internal sealed class WindowView {
 	}
 
 	private void BuildOrnament() {
+		if (_frameOrnament != null) {
+			OrnamentImage = _frameOrnament;
+			OrnamentImage.type = Image.Type.Sliced;
+			OrnamentImage.raycastTarget = false;
+			SetOrnament(Assets.OrnamentStyle.Border);
+			return;
+		}
         var rt = UiFactory.NewRect("DM Ornament", Root);
         UiFactory.Stretch(rt);
 
@@ -224,6 +237,7 @@ public sealed class WindowHandle {
 	private bool _draggable, _fullscreenable;
 	private bool _closed;
 	private Assets.OrnamentStyle _ornamentStyle = Assets.OrnamentStyle.Border;
+	private GameObject _closeButton;
 
 	private WindowState _state = WindowState.Normal;
 	private Vector2 _normalAnchoredPosition, _normalSizeDelta;
@@ -279,6 +293,45 @@ public sealed class WindowHandle {
         _view?.SetOrnament(style);
         return this;
     }
+
+	/// <summary>
+	/// Puts the game's own close button (the small X of its About/Store windows, a clone) in the top-right corner; clicking it closes the window.
+	/// Leave a little room at the top right of the body for it. <c>Closable(false)</c> removes it again.
+	/// </summary>
+	public WindowHandle Closable(bool on = true) {
+		if (!IsOpen) return this;
+		if (!on) {
+			if (_closeButton != null) UnityEngine.Object.Destroy(_closeButton);
+			_closeButton = null;
+			return this;
+		}
+		if (_closeButton != null) return this;
+
+		RectTransform rt;
+		var native = NativeButton.CreateClose(_view.Root, "DM Close", Close);
+		if (native != null) { _closeButton = native.Go; rt = native.Rt; }
+		else {
+			UiLog.Once("legacy-close", "native close button template not found - using a hand-built X.");
+			rt = UiFactory.NewRect("DM Close (fallback)", _view.Root);
+			var bg = rt.gameObject.AddComponent<UnityEngine.UI.Image>();
+			bg.color = new Color(0.20f, 0.17f, 0.13f, 0.95f);
+			var btn = rt.gameObject.AddComponent<UnityEngine.UI.Button>();
+			btn.targetGraphic = bg;
+			UiFactory.AttachClick(btn, Close);
+			var x = UiFactory.MakeText(rt, "DM X", "X", 16f, TMPro.TextAlignmentOptions.Center);
+			UiFactory.Stretch(x.rectTransform);
+			_closeButton = rt.gameObject;
+		}
+
+		var le = _closeButton.GetComponent<UnityEngine.UI.LayoutElement>() ?? _closeButton.AddComponent<UnityEngine.UI.LayoutElement>();
+		le.ignoreLayout = true;
+		rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+		rt.pivot = new Vector2(1f, 1f);
+		rt.sizeDelta = new Vector2(30f, 30f);
+		rt.anchoredPosition = new Vector2(-10f, -10f);
+		rt.SetAsLastSibling();
+		return this;
+	}
 
 	public void Show() { if (IsOpen) _view.Root.gameObject.SetActive(true); }
 	public void Hide() { if (IsOpen) _view.Root.gameObject.SetActive(false); }

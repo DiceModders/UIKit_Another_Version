@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace DiceModders.UiKit;
 
 /// <summary>The tabs of the game's Settings screen that mods can add rows to.</summary>
-public enum SettingsTab { Video, Audio, Input, Game }
+/// <summary>Lobby is the settings box of the match-start (lobby) screen.</summary>
+public enum SettingsTab { Video, Audio, Input, Game, Lobby }
+
+public enum SettingsCorner { TopLeft, TopRight, BottomLeft, BottomRight }
 
 /// <summary>Handle of a registered settings block; <see cref="Remove"/> takes it out again (it disappears the next time the screen is built).</summary>
 public sealed class SettingsRegistration {
@@ -49,6 +53,26 @@ public static partial class UiKit {
 		/// <param name="title">Header shown above the rows (usually your mod's name).</param>
 		/// <param name="build">Adds the rows: <c>s.Toggle(...)</c>, <c>s.Button(...)</c>, <c>s.Stepper(...)</c>, <c>s.Info(...)</c>.</param>
 		/// <param name="order">Lower values come first among mods.</param>
+		/// <summary>Raised each time the game's Settings screen is shown. The argument is the screen's root RectTransform.</summary>
+		public static event Action<RectTransform> Opened;
+		internal static void RaiseOpened(RectTransform screen) {
+			var handler = Opened;
+			if (handler == null) return;
+			foreach (Action<RectTransform> d in handler.GetInvocationList()) {
+				try { d(screen); }
+				catch (Exception e) { UiLog.Error("Settings.Opened handler failed: " + e); }
+			}
+		}
+
+		/// <summary>
+		/// An invisible clickable area in a corner of the Settings screen. <paramref name="onTriggered"/> runs after <paramref name="clicks"/> clicks in a row
+		/// (a pause longer than <paramref name="maxGapSeconds"/> restarts the count). Use it for hidden unlocks.
+		/// </summary>
+		public static SettingsHotspot AddHotspot(string id, SettingsCorner corner, int clicks, Action onTriggered, float size = 40f, float maxGapSeconds = 3f) {
+			Core.Ensure();
+			return SettingsHotspots.Add(id, corner, clicks, onTriggered, size, maxGapSeconds);
+		}
+
 		public static SettingsRegistration Add(SettingsTab tab, string title, Action<SettingsSection> build, int order = 0) {
 			Core.Ensure();
 			if (build == null) throw new ArgumentNullException(nameof(build));

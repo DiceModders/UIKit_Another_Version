@@ -17,7 +17,11 @@ internal static class SettingsHook {
 	public static void Install() {
 		if (_installed) return;
 		_installed = true;
-		try { new Harmony("DiceModders.UiKit.settings").PatchAll(typeof(SettingsHook)); }
+		try {
+			var harmony = new Harmony("DiceModders.UiKit.settings");
+			harmony.PatchAll(typeof(SettingsHook));
+			harmony.PatchAll(typeof(SettingsOpenedHook));
+		}
 		catch (Exception e) { UiLog.Error("settings hook failed: " + e); }
 	}
 
@@ -27,7 +31,7 @@ internal static class SettingsHook {
 			if (__instance == null || __instance.holder == null) return;
 			if (!TryGetTab(__instance, out var tab)) return;
 			var regs = SettingsRegistry.For(tab);
-			if (regs.Count == 0) { SettingsCloseShift.Update(__instance, false); return; }
+			if (regs.Count == 0) { if (tab != SettingsTab.Lobby) SettingsCloseShift.Update(__instance, false); return; }
 
 			RemoveOld(__instance);
 			SettingsBuilder.MeasureContentLeft(__instance);
@@ -41,7 +45,7 @@ internal static class SettingsHook {
 				catch (Exception e) { UiLog.Error($"settings block '{reg.Title}' failed: {e}"); }
 			}
 			UnityEngine.UI.LayoutRebuilder.MarkLayoutForRebuild(__instance.holder);
-			SettingsCloseShift.Update(__instance, true);
+			if (tab != SettingsTab.Lobby) SettingsCloseShift.Update(__instance, true);
 		}
 		catch (Exception e) { UiLog.Once("settings:hook", "settings hook: " + e); }
 	}
@@ -54,8 +58,18 @@ internal static class SettingsHook {
 		}
 	}
 
+	/// <summary>The match-start screen (<c>StartGame</c>) owns the lobby settings box as its <c>lobbySettingsInterface</c>.</summary>
+	private static bool IsLobbySet(GameSetInterface set) {
+		var start = set.GetComponentInParent<DiceKingdoms.Interface.StartGame>(true);
+		if (start != null) return start.lobbySettingsInterface != null && start.lobbySettingsInterface.Pointer == set.Pointer;
+		foreach (var candidate in UnityEngine.Object.FindObjectsOfType<DiceKingdoms.Interface.StartGame>(true))
+			if (candidate != null && candidate.lobbySettingsInterface != null && candidate.lobbySettingsInterface.Pointer == set.Pointer) return true;
+		return false;
+	}
+
 	private static bool TryGetTab(GameSetInterface set, out SettingsTab tab) {
 		tab = SettingsTab.Video;
+		if (IsLobbySet(set)) { tab = SettingsTab.Lobby; return true; }
 		var sets = set.GetComponentInParent<GameSetsInterface>(true);
 		if (sets == null) return false;
 		IntPtr p = set.Pointer;
@@ -64,5 +78,21 @@ internal static class SettingsHook {
 		if (sets.input != null && sets.input.Pointer == p) { tab = SettingsTab.Input; return true; }
 		if (sets.game  != null && sets.game.Pointer  == p) { tab = SettingsTab.Game;  return true; }
 		return false;
+	}
+}
+
+/// <summary>Postfix on <c>SettingSetsInterface.OnEnable</c>: the Settings screen was shown.</summary>
+[HarmonyPatch(typeof(GameSetsInterface), "OnEnable")]
+internal static class SettingsOpenedHook {
+	[HarmonyPostfix]
+	public static void Postfix(GameSetsInterface __instance) {
+		try {
+			if (__instance == null) return;
+			var rect = __instance.GetComponent<UnityEngine.RectTransform>();
+			if (rect == null) return;
+			SettingsHotspots.Ensure(rect);
+			UiKit.Settings.RaiseOpened(rect);
+		}
+		catch (Exception e) { UiLog.Once("settings:opened", "settings opened hook: " + e); }
 	}
 }

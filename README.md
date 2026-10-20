@@ -41,6 +41,52 @@ Layout (`Vertical`, `Horizontal`, `Grid`, `Fixed*`, `Weight*`, `Spacing`, `Paddi
 `ButtonHandle` also has `OnClick`, `SetSelected(bool)` (the game's selected/unselected art), `SetIcon`, `SetTooltip`.
 Icon names are the game's sprite names; list them with `Assets.SpriteNames("filter")`.
 
+### More elements
+
+```csharp
+UiKit.Window(w => {
+    w.Size(420, 520).Draggable().Closable();                    // Closable(): the game's own X button, top right
+
+    var map = w.Body.Image(texture).Filter(FilterMode.Point).FixedH(200);   // a RawImage; Refresh() after drawing into the texture
+    map.OnPointer(e => {                                                     // Down, Up, Click, Move, Drag, Enter, Exit
+        if (e.Kind == PointerKind.Drag && e.Button == 1) Pan(e.Delta);       // e.Uv is 0..1 inside the picture, e.Position/Delta are canvas units
+    });
+    map.OnScroll(notches => Zoom(notches));                                  // mouse wheel over the picture
+
+    w.Body.Slider(0, 100, 40, v => Log(v), "0");                              // game slider + value text; SetValue/SetRange/WholeNumbers/Format
+    w.Body.Dropdown(new[] { "A", "B", "C" }, 0, i => Log(i));                 // game dropdown; SetIndex/SetOptions
+    w.Body.ScrollView(list => { for (int i = 0; i < 30; i++) list.Label("row " + i); }).FixedH(120);
+});
+```
+
+Windows are not draggable unless you call `Draggable()`, so a "locked" window is simply one without it.
+The mouse wheel is read directly from the Input System (only while the pointer is over an image or scroll view), because the game's UI does not deliver wheel events reliably.
+A picture is stretched to its rectangle: for square pixels give it a size with the texture's proportions, inside a `Horizontal` row so it is not widened (`row.Image(tex).Fixed(150)`).
+An image that has an `OnScroll` handler takes the wheel before a scroll view around it.
+
+## Rules screen (civilizations)
+
+```csharp
+UiKit.Rules.AddCivilization(10, "My civilization", () => myTechTree);   // Func<DiceKingdoms.Game.TechTree>
+
+// Several mods adding civilizations? Let UiKit choose the number so they never collide
+// (same key = same id on every machine, 1000 and up). Use civ.Id for your own data.
+var civ = UiKit.Rules.AddCivilization("authorname.mycivilization", "My civilization", () => myTechTree, skinsLike: 2);
+UiKit.Rules.Opened += screen => { /* the Rules screen was shown */ };
+```
+
+The game fills the civilization drop-down of the Rules screen from its `Civilization` enum and looks tech trees up in its own list (it throws for an unknown civilization).
+`AddCivilization` appends your entry to the drop-down, so picking it shows that civilization's tree on the Technologies tab, and returns your tree whenever the game asks
+for the tree of that number (Rules screen and match). Your mod still has to provide the civilization's own data (skins, colours, the `TechTree` asset) - see `docs/NOTES.md`.
+
+## Scoreboard
+
+```csharp
+UiKit.Scoreboard.AddColumn("mymod.gold", island => GoldOf(island).ToString(), "Gold income");
+```
+
+Adds one cell to every row of the match scoreboard, copied from the game's own stat cells and refreshed four times a second.
+
 ## Top bar
 
 ```csharp
@@ -62,7 +108,13 @@ UiKit.Settings.Add(SettingsTab.Game, "My Mod", s => {
 ```
 
 The callback runs each time the game rebuilds that tab (a postfix on `SettingSetInterface.GenerateElements`), so no scanning is needed. Toggle and
-stepper rows refresh while the screen is open. Tabs: `Video`, `Audio`, `Input`, `Game`.
+stepper rows refresh while the screen is open. Tabs: `Video`, `Audio`, `Input`, `Game` and `Lobby` (the settings box of the match-start screen).
+
+```csharp
+UiKit.Settings.Opened += screen => Log("Settings screen shown");
+// hidden unlock: 5 quick clicks in the bottom-left corner of the Settings screen
+UiKit.Settings.AddHotspot("mymod.unlock", SettingsCorner.BottomLeft, 5, () => Unlock());
+```
 
 ## How it stays native
 
@@ -77,3 +129,7 @@ stepper rows refresh while the screen is open. Tabs: `Video`, `Audio`, `Input`, 
 
 Look in `BepInEx/LogOutput.log` for lines from UiKit. `native text button template not found` means the game screen with the template was not loaded yet; the
 library retries and falls back to its older hand-built widgets. Report issues with the log attached.
+
+
+### Pictures keep square pixels
+`row.Image(texture)` keeps the texture's proportions in any container (centered in the space it gets), so a 64x64 canvas is always square. `KeepAspect(false)` stretches it instead.

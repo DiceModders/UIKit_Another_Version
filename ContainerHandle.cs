@@ -92,7 +92,7 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 
 		if (normal != null) {
 			bg.sprite = normal;
-			bg.type = Image.Type.Sliced;
+			bg.type = UnityEngine.UI.Image.Type.Sliced;
 			bg.color = Color.white;
 		}
 		else bg.color = new Color(0.20f, 0.17f, 0.13f, 0.95f);
@@ -120,6 +120,40 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 		handle.FixedH(fontSize * 2).WeightW(1f);
 		return handle;
 	}
+
+	/// <summary>
+	/// A picture (a RawImage) that fills the available space but keeps its texture's proportions (square pixels stay square; see <see cref="ImageHandle.KeepAspect"/>); use <c>FixedW/FixedH</c> or <c>Fixed</c> for a set size. Draw into the texture and call
+	/// <see cref="ImageHandle.Refresh"/>; <see cref="ImageHandle.OnPointer"/> and <see cref="ImageHandle.OnScroll"/> give position, press, drag, hover and wheel.
+	/// </summary>
+	public ImageHandle Image(Texture texture = null) {
+		var rt = UiFactory.NewRect("DM Image", Root);
+		var picture = UiFactory.NewRect("DM Picture", rt);
+		var raw = picture.gameObject.AddComponent<RawImage>();
+		raw.texture = texture;
+		raw.raycastTarget = true;
+		var handle = new ImageHandle(rt, raw);
+		handle.Layout.minWidth = 16f;
+		handle.Layout.minHeight = 16f;
+		handle.Layout.flexibleWidth = 1f;
+		handle.Layout.flexibleHeight = 1f;
+		return handle;
+	}
+
+	/// <summary>A slider with a value text, in the game's own style (a clone of its Frame Rate Limit slider).</summary>
+	/// <param name="format">.NET number format of the value text, e.g. "0", "0.0", "0.##".</param>
+	public SliderHandle Slider(float min, float max, float value, Action<float> onChanged, string format = "0.##")
+		=> SliderHandle.Create(Root, min, max, value, onChanged, format);
+
+	/// <summary>A drop-down list in the game's own style (a clone of its Language dropdown). <paramref name="onChanged"/> gets the chosen index.</summary>
+	public DropdownHandle Dropdown(System.Collections.Generic.IEnumerable<string> options, int index, Action<int> onChanged)
+		=> DropdownHandle.Create(Root, options, index, onChanged, (t, a) => LegacyButton(t, a, 16f).FixedH(32f).WeightW(1f));
+
+	/// <summary>
+	/// A scrolling area: <paramref name="build"/> fills its <see cref="ScrollHandle.Content"/>. A scrollbar of the game's art appears when the content is taller
+	/// than the area, and the mouse wheel scrolls. Give it a height with <c>FixedH</c>, or let it fill the space left in a vertical container.
+	/// </summary>
+	public ScrollHandle ScrollView(Action<ContainerHandle> build)
+		=> ScrollHandle.Create(Root, build);
 
 	public ContainerHandle Space(float h = 8f) {
 		var rt = UiFactory.NewRect("DM Space", Root);
