@@ -89,6 +89,7 @@ internal static class SettingsBuilder {
 		var entry = NewEntry(set, name, label);
 		if (entry == null) return;
 		var holder = entry.contentHolder;
+		EnsureRow(holder);   // same ContentLeft inset as buttons and steppers, so the checkbox lines up with the game's own controls
 		var toggle = NativeToggle.Create(NativeTemplates.BoolSetting(), holder, SafeGet(get), v => {
 			try { setValue?.Invoke(v); }
 			catch (Exception e) { UiLog.Error($"settings toggle '{label}': {e}"); }
@@ -144,6 +145,8 @@ internal static class SettingsBuilder {
 		var entry = UnityEngine.Object.Instantiate(prefab, set.holder);
 		entry.gameObject.name = name;
 		SetLabel(entry.label?.visual, label);
+		var caption = entry.label?.visual;
+		if (caption != null) { caption.enableWordWrapping = false; caption.overflowMode = TextOverflowModes.Ellipsis; }   // a long caption is cut with "..." instead of growing the row
 		return entry;
 	}
 
@@ -153,7 +156,12 @@ internal static class SettingsBuilder {
 
 	/// <summary>The game's content holder may already lay its children out; add a right aligned row only when it does not.</summary>
 	private static void EnsureRow(RectTransform holder) {
-		if (holder == null || holder.GetComponent<HorizontalOrVerticalLayoutGroup>() != null) return;
+		if (holder == null) return;
+		var existing = holder.GetComponent<HorizontalOrVerticalLayoutGroup>();
+		if (existing != null) {   // the game already lays this holder out: only make sure the inset is there
+			if (existing.padding.left < (int)ContentLeft) existing.padding.left = (int)ContentLeft;
+			return;
+		}
 		var h = holder.gameObject.AddComponent<HorizontalLayoutGroup>();
 		h.childAlignment = TextAnchor.MiddleLeft;   // the game's own controls start at the left edge of the content column
 		h.childControlWidth = false; h.childControlHeight = false;
