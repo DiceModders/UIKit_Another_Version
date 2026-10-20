@@ -30,6 +30,7 @@ internal static class SettingsHook {
 			if (regs.Count == 0) { SettingsCloseShift.Update(__instance, false); return; }
 
 			RemoveOld(__instance);
+			SettingsBuilder.MeasureContentLeft(__instance);
 			int n = 0;
 			foreach (var reg in regs) {
 				var section = new SettingsSection(__instance, (++n).ToString());

@@ -37,9 +37,9 @@ internal static class SettingsCloseShift {
 			var marker = rt.Find(Marker);
 			if (needs && marker == null) {
 				rt.anchoredPosition += new Vector2(-width, 0f);
-				var m = new GameObject(Marker, new[] { Il2CppInterop.Runtime.Il2CppType.Of<RectTransform>() });
-				m.transform.SetParent(rt, false);
-				m.GetComponent<RectTransform>().sizeDelta = new Vector2(width, 0f);
+				var m = UiFactory.NewRect(Marker, rt);
+				m.anchorMin = m.anchorMax = new Vector2(0.5f, 0.5f);
+				m.sizeDelta = new Vector2(width, 0f);
 			}
 			else if (!needs && marker != null) {
 				rt.anchoredPosition += new Vector2(marker.GetComponent<RectTransform>().sizeDelta.x, 0f);

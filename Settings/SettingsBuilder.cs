@@ -10,6 +10,7 @@ namespace DiceModders.UiKit;
 /// <summary>Creates single settings rows from the game's own row prefabs (entry = label + content holder, header).</summary>
 internal static class SettingsBuilder {
 	private const float StepButtonWidth = 32f;
+	private const float ValueWidth = 64f;
 
 	/// <summary>Distance from the left edge of a content column to where the game's own controls start (measured from a native row; the game's controls are inset).</summary>
 	public static float ContentLeft;
@@ -25,17 +26,37 @@ internal static class SettingsBuilder {
 				var entry = row.GetComponent<GameEntry>();
 				var column = entry != null ? entry.contentHolder : null;
 				if (column == null) continue;
-				for (int j = 0; j < column.childCount; j++) {
-					var k = column.GetChild(j) as RectTransform;
-					if (k == null || !k.gameObject.activeInHierarchy) continue;
-					float left = column.InverseTransformPoint(k.TransformPoint(new Vector3(k.rect.xMin, 0f, 0f))).x - column.rect.xMin;
-					if (left >= 0f && left < 400f) { ContentLeft = left; UiLog.Once("contentleft", $"settings: native controls start {left:0.#} units into the content column"); return; }
+
+				// the leftmost visible graphic inside the column is the control's frame
+				float best = float.MaxValue;
+				foreach (var g in column.GetComponentsInChildren<Graphic>(false)) {
+					if (g == null || g.transform == column) continue;
+					var r = g.rectTransform;
+					if (r.rect.width < 4f || r.rect.height < 4f) continue;
+					float left = column.InverseTransformPoint(r.TransformPoint(new Vector3(r.rect.xMin, 0f, 0f))).x - column.rect.xMin;
+					if (left >= -0.5f && left < best) best = left;
 				}
+				DescribeOnce(row, column);
+				if (best < 400f) { ContentLeft = Mathf.Max(0f, best); UiLog.Once("contentleft", $"settings: native controls start {ContentLeft:0.#} units into the content column"); return; }
 			}
 		}
 		catch (Exception e) { UiLog.Once("contentleft:err", "settings: could not measure native rows: " + e.Message); }
 	}
-	private const float ValueWidth = 64f;
+
+	/// <summary>Logs the structure of one native row once, so layout problems can be diagnosed from LogOutput.log.</summary>
+	private static void DescribeOnce(Transform row, RectTransform column) {
+		if (_described) return;
+		_described = true;
+		var sb = new System.Text.StringBuilder();
+		sb.Append($"native settings row '{row.name}': column rect={column.rect} anchors={column.anchorMin}-{column.anchorMax}");
+		foreach (var c in column.GetComponents<Component>()) if (c != null) sb.Append("\n   column component: " + c.GetIl2CppType().Name);
+		foreach (var r in column.GetComponentsInChildren<RectTransform>(true)) {
+			if (r == null || r == column) continue;
+			sb.Append($"\n   {r.name}: rect={r.rect} anchors={r.anchorMin}-{r.anchorMax} pos={r.anchoredPosition} pivot={r.pivot}");
+		}
+		UiLog.Info(sb.ToString());
+	}
+	private static bool _described;
 
 	public static void AddHeader(GameSetInterface set, string name, string text) {
 		var prefab = set.headerPrefab;

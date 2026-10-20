@@ -19,7 +19,7 @@ sounds and cursor changes, so mod UI looks and behaves like the game. Several mo
 ## For mod authors / Thunderstore
 
 UiKit is its own BepInEx plugin. Publish it as a separate Thunderstore package and list it in your mod's `manifest.json` `dependencies`; mod managers then install it
-automatically. In code add `[BepInDependency(UiKit plugin GUID)]` so UiKit loads first. Do not copy the DLL into your own package (two copies would both patch the game).
+automatically. In code add `[BepInDependency(UiKit plugin GUID)]` so UiKit loads first. Do not copy the DLL into your own package (two copies would both patch the game). A complete example is in [docs/EXAMPLE_MOD.md](docs/EXAMPLE_MOD.md).
 
 ## Windows
 
@@ -77,8 +77,3 @@ stepper rows refresh while the screen is open. Tabs: `Video`, `Audio`, `Input`, 
 
 Look in `BepInEx/LogOutput.log` for lines from UiKit. `native text button template not found` means the game screen with the template was not loaded yet; the
 library retries and falls back to its older hand-built widgets. Report issues with the log attached.
-
-## Compatibility
-
-All earlier public API is unchanged; the additions are `UiKit.Init/TopBar/Settings`, `ContainerHandle.IconButton/Toggle`, `ToggleHandle`, `ButtonHandle.OnClick/SetSelected/SetIcon/SetTooltip`,
-`Assets.SpriteNames/SpriteFromPng/Invalidate`, `OrnamentStyle.Classic`, `UiRoot.Invalidate`.

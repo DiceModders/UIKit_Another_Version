@@ -39,6 +39,9 @@ internal sealed class NativeButton {
 
 	/// <summary>Edge length (in units) the donor icon button was designed for; used to scale the icon when a clone is made smaller or larger.</summary>
 	private float _designSize = 0f;
+	private Vector2 _iconBox;
+	private float _iconScale = 1f;
+	private const float IconFill = 0.82f;
 
 	private Image _dim;
 	private GameButton.State _state = GameButton.State.READY;
@@ -79,6 +82,9 @@ internal sealed class NativeButton {
 		if (nb == null) return null;
 		var templateRect = template.GetComponent<RectTransform>();
 		if (templateRect != null) nb._designSize = Mathf.Min(templateRect.rect.width, templateRect.rect.height);
+		var donorImage = FindIconImageIn(template);
+		if (donorImage != null) { var size = donorImage.rectTransform.rect.size; float edge = Mathf.Min(size.x, size.y); nb._iconBox = new Vector2(edge, edge); }
+		else DescribeIconTemplate(template);
 		nb.SetIcon(icon);
 		nb.SetClick(click);
 		return nb;
@@ -151,25 +157,62 @@ internal sealed class NativeButton {
 	public void SetIcon(Sprite sprite) {
 		if (sprite == null || Go == null) return;
 		var icon = Go.GetComponent<GameButtonIcon>();
-		if (icon != null) { icon.Icon = sprite; return; }
-		var top = Go.transform.Find("Top/Icon");
-		var image = top != null ? top.GetComponent<Image>() : null;
-		if (image != null) image.sprite = sprite;
+		if (icon != null) icon.Icon = sprite;
+		else { var image = FindIconImage(); if (image != null) image.sprite = sprite; }
+		NormalizeIcon();
+	}
+
+	private Image FindIconImage() => FindIconImageIn(Go);
+
+	/// <summary>The image that shows the icon: <c>Top/Icon</c>, else any child image named like an icon, else the largest non-background child image.</summary>
+	private static Image FindIconImageIn(GameObject root) {
+		if (root == null) return null;
+		var t = root.transform.Find("Top/Icon");
+		var image = t != null ? t.GetComponent<Image>() : null;
+		if (image != null) return image;
+		Image fallback = null;
+		foreach (var i in root.GetComponentsInChildren<Image>(true)) {
+			if (i == null || i.gameObject == root || Staging.IsOurs(i.transform)) continue;
+			if (i.name.Contains("Icon")) return i;
+			string n = i.name.ToLowerInvariant();
+			if (n.Contains("shadow") || n.Contains("background") || n.Contains("outline") || n.Contains("border")) continue;
+			if (fallback == null) fallback = i;
+		}
+		return fallback;
+	}
+
+	private static void DescribeIconTemplate(GameObject root) {
+		var sb = new System.Text.StringBuilder("icon template '" + root.name + "' children:");
+		foreach (var r in root.GetComponentsInChildren<RectTransform>(true)) {
+			if (r == null || r.gameObject == root) continue;
+			var img = r.GetComponent<Image>();
+			sb.Append($"\n   {r.name}: rect={r.rect} anchors={r.anchorMin}-{r.anchorMax} pos={r.anchoredPosition} image={(img != null ? "yes" : "no")}");
+		}
+		UiLog.Once("icontemplate", sb.ToString());
 	}
 
 	/// <summary>
-	/// Scales the icon with the button. The donor's icon has a fixed size made for the donor's own button size, so in a smaller button it would stick out
-	/// of the frame. Does nothing for icons that already stretch with their button.
+	/// Puts the icon in the same centred box the game's own icons use (taken from the donor), keeps its aspect ratio and makes it a little smaller than the box,
+	/// because sprites with full-tile art look bigger than the glyphs the game draws with padding. <see cref="_iconScale"/> follows the button size.
 	/// </summary>
+	private void NormalizeIcon() {
+		var image = FindIconImage();
+		if (image == null || _iconBox.x < 1f) return;
+		var rt = image.rectTransform;
+		image.preserveAspect = true;
+		rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+		rt.pivot = new Vector2(0.5f, 0.5f);
+		rt.anchoredPosition = Vector2.zero;
+		rt.localScale = Vector3.one;
+		rt.sizeDelta = _iconBox * (IconFill * _iconScale);
+	}
+
+	/// <summary>Scales the icon with the button when the button is not the donor's size (e.g. 32 units inside a window).</summary>
 	public void FitIcon(float buttonSize) {
-		if (Go == null || _designSize < 1f) return;
-		var icon = Go.transform.Find("Top/Icon") ?? Go.GetComponentInChildren<GameButtonIcon>(true)?.transform;
-		var rt = icon != null ? icon.GetComponent<RectTransform>() : null;
-		if (rt == null) return;
-		UiLog.Once("icongeo", $"icon button geometry: design={_designSize:0.#} anchors={rt.anchorMin}-{rt.anchorMax} size={rt.rect.size} -> button {buttonSize:0.#}");
-		if (rt.anchorMin != rt.anchorMax) return;   // stretches with the button already
-		float factor = Mathf.Clamp(buttonSize / _designSize, 0.25f, 4f);
-		rt.localScale = new Vector3(factor, factor, 1f);
+		if (_designSize < 1f) return;
+		_iconScale = Mathf.Clamp(buttonSize / _designSize, 0.25f, 4f);
+		NormalizeIcon();
+		UiLog.Once("icongeo", $"icon button: design={_designSize:0.#} iconBox={_iconBox} -> button {buttonSize:0.#} (scale {_iconScale:0.##})");
 	}
 
 	public void SetTooltip(string text) {
