@@ -121,9 +121,10 @@ internal static class SettingsBuilder {
 		var holder = entry.contentHolder;
 		EnsureRow(holder);
 
-		NativeButton.CreateLabel(holder, name + " Minus", "-", 20f, () => Step(step, -1))?.SetSize(StepButtonWidth, NativeButton.Height);
+		TMP_Text value = null;   // shown between the buttons; both buttons refresh it at once instead of waiting for the live refresh
+		NativeButton.CreateLabel(holder, name + " Minus", "-", 20f, () => { Step(step, -1); if (value != null) value.text = SafeText(valueText); })?.SetSize(StepButtonWidth, NativeButton.Height);
 
-		var value = NativeText.Create(holder, name + " Value", SafeText(valueText), 16f, TextAlignmentOptions.Center);
+		value = NativeText.Create(holder, name + " Value", SafeText(valueText), 16f, TextAlignmentOptions.Center);
 		var le = value.gameObject.AddComponent<LayoutElement>();
 		le.preferredWidth = ValueWidth; le.minWidth = ValueWidth; le.preferredHeight = NativeButton.Height;
 		SettingsLive.Add(entry, () => value.text = SafeText(valueText));

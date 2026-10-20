@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,10 +14,14 @@ public sealed class ScrollHandle : ElementHandle<ScrollHandle> {
 	public ContainerHandle Content { get; }
 
 	private const float WheelStepPixels = 64f;
+	private static readonly List<ScrollHandle> All = new();
+	private bool _pinned = true;           // stays at the top while the content is being built / re-measured, until the user (or the mod) scrolls
+	private float _lastContentHeight = -1f;
 
 	internal ScrollHandle(RectTransform root, ScrollRect scroll, ContainerHandle content) : base(root) {
 		Scroll = scroll;
 		Content = content;
+		All.Add(this);
 		var viewport = scroll.viewport;
 		PointerTracker.Add(root,
 			p => root.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(viewport != null ? viewport : root, p, PointerTracker.CameraFor(root)),
@@ -26,7 +31,41 @@ public sealed class ScrollHandle : ElementHandle<ScrollHandle> {
 	/// <summary>0 = top, 1 = bottom.</summary>
 	public float Position {
 		get => Scroll != null ? 1f - Scroll.verticalNormalizedPosition : 0f;
-		set { if (Scroll != null) Scroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(value); }
+		set { _pinned = false; if (Scroll != null) Scroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(value); }
+	}
+
+	/// <summary>
+	/// A ScrollRect whose content grows after it was created (wrapped text, rows added later) would otherwise start at the bottom. Until someone scrolls,
+	/// the view is kept at the top whenever the content height changes. Called each frame from <see cref="TextWrap"/>.
+	/// </summary>
+	internal static void PinAll() {
+		for (int i = All.Count - 1; i >= 0; i--) {
+			var h = All[i];
+			if (h.Scroll == null || h.Scroll.content == null) { All.RemoveAt(i); continue; }
+			h.Pin();
+		}
+	}
+
+	private void Pin() {
+		float height = Scroll.content.rect.height;
+		bool changed = Mathf.Abs(height - _lastContentHeight) >= 0.5f;
+		if (_pinned) {
+			if (!changed) {
+				if (Scroll.verticalNormalizedPosition < 0.999f && _lastContentHeight > 0f) _pinned = false;   // moved by the scrollbar or a drag
+				return;
+			}
+			_lastContentHeight = height;
+			Scroll.verticalNormalizedPosition = 1f;
+			return;
+		}
+		if (!changed) return;
+		_lastContentHeight = height;
+		// The content got shorter or taller while scrolled (e.g. SetText on a paragraph): keep the pixel offset from the top but never beyond the new end,
+		// otherwise the view can sit past the end of the content and show a half-empty area.
+		float max = Mathf.Max(0f, height - (Scroll.viewport != null ? Scroll.viewport.rect.height : 0f));
+		var pos = Scroll.content.anchoredPosition;
+		float y = Mathf.Clamp(pos.y, 0f, max);
+		if (Mathf.Abs(y - pos.y) > 0.01f) { pos.y = y; Scroll.content.anchoredPosition = pos; Scroll.StopMovement(); }
 	}
 
 	public ScrollHandle ScrollToTop()    { Position = 0f; return this; }
@@ -36,6 +75,7 @@ public sealed class ScrollHandle : ElementHandle<ScrollHandle> {
 		if (Scroll == null || Scroll.content == null || Scroll.viewport == null) return;
 		float scrollable = Scroll.content.rect.height - Scroll.viewport.rect.height;
 		if (scrollable <= 1f) return;
+		_pinned = false;
 		Scroll.verticalNormalizedPosition = Mathf.Clamp01(Scroll.verticalNormalizedPosition + notches * WheelStepPixels / scrollable);
 	}
 
@@ -118,29 +158,6 @@ public sealed class ScrollHandle : ElementHandle<ScrollHandle> {
 			}
 			catch (Exception e) { UiLog.Warn("native scrollbar failed: " + e.Message); }
 		}
-		UiLog.Once("legacy-scrollbar", "native scrollbar template not found - using a hand-built scrollbar.");
-		return FallbackScrollbar(root);
-	}
-
-	private static Scrollbar FallbackScrollbar(RectTransform root) {
-		var rt = UiFactory.NewRect("DM Scrollbar (fallback)", root);
-		rt.anchorMin = new Vector2(1f, 0f); rt.anchorMax = new Vector2(1f, 1f);
-		rt.pivot = new Vector2(1f, 1f);
-		rt.sizeDelta = new Vector2(12f, 0f);
-		rt.anchoredPosition = Vector2.zero;
-		rt.gameObject.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.4f);
-
-		var area = UiFactory.NewRect("Sliding Area", rt);
-		UiFactory.Stretch(area);
-		var handle = UiFactory.NewRect("Handle", area);
-		UiFactory.Stretch(handle);
-		var handleImage = handle.gameObject.AddComponent<Image>();
-		handleImage.color = new Color(0.82f, 0.68f, 0.40f, 0.85f);
-
-		var bar = rt.gameObject.AddComponent<Scrollbar>();
-		bar.handleRect = handle;
-		bar.targetGraphic = handleImage;
-		bar.direction = Scrollbar.Direction.BottomToTop;
-		return bar;
+		throw new InvalidOperationException("UiKit: the game's scrollbar template was not found (is the game's UI loaded?).");
 	}
 }

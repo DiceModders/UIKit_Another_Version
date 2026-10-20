@@ -93,7 +93,7 @@ internal sealed class WindowDragHandler : MonoBehaviour {
 	}
 
 	private void ClampToParent(ref Vector2 p) {
-		var parent = WindowRoot.parent as RectTransform;
+		var parent = WindowRoot.parent != null ? WindowRoot.parent.TryCast<RectTransform>() : null;   // 'as' gives null on IL2CPP wrappers
 		if (parent == null) return;
 
 		var pr = parent.rect;
@@ -116,6 +116,11 @@ internal sealed class WindowView {
 	public Image OrnamentImage { get; private set; }
 	private RectTransform _frame;
 	private Image _frameOrnament;
+
+	public const float TitleTop = 10f, TitleHeight = 32f, TitleGap = 6f;
+	public RectTransform TitleStrip { get; private set; }
+	public TMPro.TextMeshProUGUI TitleText { get; private set; }
+	public ContainerHandle TitleButtons { get; private set; }
 
 	private WindowView() { }
 
@@ -153,6 +158,7 @@ internal sealed class WindowView {
 		BodyArea.offsetMin = new Vector2(WindowHandle.Padding, WindowHandle.Padding);
 		BodyArea.offsetMax = new Vector2(-WindowHandle.Padding, -WindowHandle.Padding);
 
+		BodyArea.gameObject.AddComponent<RectMask2D>();   // content that is taller than the window is cut at the body, it never spills out of the frame
 		var vlg = BodyArea.gameObject.AddComponent<VerticalLayoutGroup>();
 		vlg.childAlignment        = TextAnchor.UpperLeft;
 		vlg.childControlWidth     = true;
@@ -183,6 +189,53 @@ internal sealed class WindowView {
 
 		SetOrnament(Assets.OrnamentStyle.Border);
     }
+
+	/// <summary>Creates the title strip (title text on the left, a button row on the right) and moves the body below it. Does nothing the second time.</summary>
+	public void EnsureTitle() {
+		if (TitleStrip != null || Root == null) return;
+		TitleStrip = UiFactory.NewRect("DM Title Bar", Root);
+		TitleStrip.anchorMin = new Vector2(0f, 1f);
+		TitleStrip.anchorMax = new Vector2(1f, 1f);
+		TitleStrip.pivot = new Vector2(0.5f, 1f);
+		TitleStrip.sizeDelta = new Vector2(0f, TitleHeight);
+		SetTitleInsets(false);
+
+		var lg = TitleStrip.gameObject.AddComponent<HorizontalLayoutGroup>();
+		lg.spacing = 8f;
+		lg.childAlignment = TextAnchor.MiddleLeft;
+		lg.childControlWidth = true;
+		lg.childControlHeight = true;
+		lg.childForceExpandWidth = false;
+		lg.childForceExpandHeight = true;
+
+		TitleText = NativeText.Create(TitleStrip, "DM Title", "", 20f, TMPro.TextAlignmentOptions.MidlineLeft);
+		TitleText.enableWordWrapping = false;
+		TitleText.overflowMode = TMPro.TextOverflowModes.Ellipsis;   // cut with "..." instead of running under the buttons
+		TextWrap.WatchWidth(TitleText);   // re-cut with "..." as soon as the layout has given it its width
+		var tle = TitleText.gameObject.AddComponent<LayoutElement>();
+		tle.minWidth = 0f; tle.preferredWidth = 0f; tle.flexibleWidth = 1f;
+
+		var buttons = UiFactory.NewRect("DM Title Buttons", TitleStrip);
+		var blg = buttons.gameObject.AddComponent<HorizontalLayoutGroup>();
+		blg.spacing = 6f;
+		blg.childAlignment = TextAnchor.MiddleRight;
+		blg.childControlWidth = true;
+		blg.childControlHeight = true;
+		blg.childForceExpandWidth = false;
+		blg.childForceExpandHeight = true;
+		TitleButtons = new ContainerHandle(buttons) { TextSizedButtons = true };
+		TitleButtons.Layout.flexibleWidth = 0f;
+
+		BodyArea.offsetMax = new Vector2(-WindowHandle.Padding, -(TitleTop + TitleHeight + TitleGap));
+	}
+
+	/// <summary>The close X sits in the top-right corner (30 wide, 10 from the edge): with it the strip keeps clear of it.</summary>
+	public void SetTitleInsets(bool closable) {
+		if (TitleStrip == null) return;
+		float right = closable ? 10f + NativeButton.SlicedFit + 8f : WindowHandle.Padding;
+		TitleStrip.offsetMin = new Vector2(WindowHandle.Padding, -(TitleTop + TitleHeight));
+		TitleStrip.offsetMax = new Vector2(-right, -TitleTop);
+	}
 
 	public void SetOrnament(Assets.OrnamentStyle style) {
         if (OrnamentImage == null) return;
@@ -238,6 +291,7 @@ public sealed class WindowHandle {
 	private bool _closed;
 	private Assets.OrnamentStyle _ornamentStyle = Assets.OrnamentStyle.Border;
 	private GameObject _closeButton;
+	private ButtonHandle _fullscreenButton;
 
 	private WindowState _state = WindowState.Normal;
 	private Vector2 _normalAnchoredPosition, _normalSizeDelta;
@@ -288,6 +342,49 @@ public sealed class WindowHandle {
 		return this;
 	}
 
+	/// <summary>
+	/// Adds a title strip at the top (the game's font, left aligned, cut with "..." when too long) and moves the body below it.
+	/// A window without <c>Title</c> looks as before. Use <see cref="TitleBar"/> for buttons on the right of the strip.
+	/// </summary>
+	public WindowHandle Title(string text) {
+		if (!IsOpen) return this;
+		_view.EnsureTitle();
+		_view.SetTitleInsets(_closeButton != null);
+		if (_view.TitleText != null) _view.TitleText.text = text ?? "";
+		return this;
+	}
+
+	public WindowHandle SetTitle(string text) => Title(text);
+
+	/// <summary>
+	/// The right-hand part of the title strip: a horizontal container for buttons (<c>Button</c> there is as wide as its text; use
+	/// <c>IconButton(...).FixedW(32)</c> for icons). Using it creates the strip, with an empty title. It keeps clear of the close X.
+	/// </summary>
+	public ContainerHandle TitleBar {
+		get {
+			if (!IsOpen) return null;
+			_view.EnsureTitle();
+			_view.SetTitleInsets(_closeButton != null);
+			return _view.TitleButtons;
+		}
+	}
+
+	/// <summary>Adds a "Full screen / Window" toggle button to the title bar (and makes the window fullscreenable). <c>FullscreenButton(false)</c> removes it.</summary>
+	public WindowHandle FullscreenButton(bool on = true) {
+		if (!IsOpen) return this;
+		if (!on) {
+			if (_fullscreenButton != null) UnityEngine.Object.Destroy(_fullscreenButton.Root.gameObject);
+			_fullscreenButton = null;
+			return this;
+		}
+		if (_fullscreenButton != null) return this;
+		_fullscreenable = true;
+		var bar = TitleBar;
+		if (bar == null) return this;
+		_fullscreenButton = bar.Button(_state == WindowState.Fullscreen ? "Window" : "Full screen", HandleDoubleClick);
+		return this;
+	}
+
     public WindowHandle Ornament(Assets.OrnamentStyle style = Assets.OrnamentStyle.Border) {
         _ornamentStyle   = style;
         _view?.SetOrnament(style);
@@ -303,33 +400,25 @@ public sealed class WindowHandle {
 		if (!on) {
 			if (_closeButton != null) UnityEngine.Object.Destroy(_closeButton);
 			_closeButton = null;
+			_view.SetTitleInsets(false);
 			return this;
 		}
 		if (_closeButton != null) return this;
 
-		RectTransform rt;
 		var native = NativeButton.CreateClose(_view.Root, "DM Close", Close);
-		if (native != null) { _closeButton = native.Go; rt = native.Rt; }
-		else {
-			UiLog.Once("legacy-close", "native close button template not found - using a hand-built X.");
-			rt = UiFactory.NewRect("DM Close (fallback)", _view.Root);
-			var bg = rt.gameObject.AddComponent<UnityEngine.UI.Image>();
-			bg.color = new Color(0.20f, 0.17f, 0.13f, 0.95f);
-			var btn = rt.gameObject.AddComponent<UnityEngine.UI.Button>();
-			btn.targetGraphic = bg;
-			UiFactory.AttachClick(btn, Close);
-			var x = UiFactory.MakeText(rt, "DM X", "X", 16f, TMPro.TextAlignmentOptions.Center);
-			UiFactory.Stretch(x.rectTransform);
-			_closeButton = rt.gameObject;
-		}
+		if (native == null) { UiLog.Warn("window: the game's close button template was not found - no X added."); return this; }
+		_closeButton = native.Go;
+		RectTransform rt = native.Rt;
 
 		var le = _closeButton.GetComponent<UnityEngine.UI.LayoutElement>() ?? _closeButton.AddComponent<UnityEngine.UI.LayoutElement>();
 		le.ignoreLayout = true;
 		rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
 		rt.pivot = new Vector2(1f, 1f);
-		rt.sizeDelta = new Vector2(30f, 30f);
+		rt.sizeDelta = new Vector2(NativeButton.SlicedFit, NativeButton.SlicedFit);   // the same size as the title bar buttons
 		rt.anchoredPosition = new Vector2(-10f, -10f);
 		rt.SetAsLastSibling();
+		_view.EnsureTitle();          // the X gets its own row above the body, so content never runs under it
+		_view.SetTitleInsets(true);   // a title strip keeps clear of the X, whichever call came first
 		return this;
 	}
 
@@ -406,6 +495,7 @@ public sealed class WindowHandle {
 
 	private void ApplyStateVisual() {
 		if (_view == null) return;
+		if (_fullscreenButton != null) _fullscreenButton.SetText(_state == WindowState.Fullscreen ? "Window" : "Full screen");
 
 		switch (_state) {
 			case WindowState.Normal:

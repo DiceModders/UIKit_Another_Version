@@ -74,8 +74,35 @@ internal sealed class NativeButton {
 		return nb;
 	}
 
-	/// <summary>Icon button, cloned from the Rules "?" button of the top-right bar.</summary>
+	/// <summary>
+	/// Icon button: a clone of the same text button as <see cref="CreateLabel"/> (so it is exactly as big and looks exactly like the other buttons, with no
+	/// scaling artifacts) with the icon drawn in place of the text. The tooltip, hover/pressed art, cursor and sounds are the game's own.
+	/// </summary>
 	public static NativeButton CreateIcon(Transform parent, string name, Sprite icon, Action click, string tooltip) {
+		var template = NativeTemplates.LabelButton();
+		if (template == null) return null;
+		var nb = Clone(template, parent, name, tooltip);
+		if (nb == null) return null;
+
+		var label = nb.Go.GetComponent<GameButtonLabel>();
+		var text = label != null && label.label != null ? label.label.visual : nb.Go.GetComponentInChildren<TMP_Text>(true);
+		if (text != null) text.text = string.Empty;
+
+		var top = nb.Go.transform.Find("Top");   // the part of the button that moves down when it is pressed
+		var holder = top != null ? top.GetComponent<RectTransform>() : nb.Rt;
+		var iconRt = UiFactory.NewRect("Icon", holder);
+		var image = iconRt.gameObject.AddComponent<Image>();
+		image.raycastTarget = false;
+		image.preserveAspect = true;
+		nb._designSize = SlicedFit;
+		nb._iconBox = new Vector2(24f, 24f);
+		nb.SetIcon(icon);
+		nb.SetClick(click);
+		return nb;
+	}
+
+	/// <summary>Icon button of the top-right bar, cloned from the game's own bar button (the bar is the one place that art fits at its native size).</summary>
+	public static NativeButton CreateBarIcon(Transform parent, string name, Sprite icon, Action click, string tooltip) {
 		var template = NativeTemplates.IconButton();
 		if (template == null) return null;
 		var nb = Clone(template, parent, name, tooltip);

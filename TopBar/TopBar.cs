@@ -146,7 +146,7 @@ public static partial class UiKit {
 				sprite = Assets.GetSprite(button.IconName);
 				if (sprite == null) UiLog.Once("topbaricon:" + button.IconName, $"top bar button '{button.Id}': no game sprite named '{button.IconName}' - keeping the default icon");
 			}
-			var native = NativeButton.CreateIcon(bar, "DM Bar " + button.Id, sprite, () => captured.Click?.Invoke(), button.Tip);
+			var native = NativeButton.CreateBarIcon(bar, "DM Bar " + button.Id, sprite, () => captured.Click?.Invoke(), button.Tip);
 			if (native == null) return;   // the template button does not exist yet; retried on the next tick
 			button.Native = native;
 			native.SetVisible(button.Visible);

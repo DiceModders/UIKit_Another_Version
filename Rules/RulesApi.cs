@@ -35,7 +35,7 @@ internal static class RulesRegistry {
 	public static RulesCivilization Add(int id, string name, Func<GameTechTree> techTree, int skinsLike) {
 		var clash = Items.Find(c => c.Id == id);
 		if (clash != null && clash.Name != name)
-			UiLog.Warn($"Rules: civilization id {id} is already used by '{clash.Name}' - '{name}' replaces it. Use UiKit.Rules.AddCivilization(\"your.mod.civ\", ...) to get a free id automatically.");
+			UiLog.Warn($"Rules: civilization id {id} is already used by '{clash.Name}' - '{name}' replaces it.");
 		Items.RemoveAll(c => c.Id == id);   // registering the same id again replaces it
 		var civ = new RulesCivilization(id, name, techTree, skinsLike);
 		Items.Add(civ);
@@ -66,27 +66,19 @@ public static partial class UiKit {
 	public static class Rules {
 		/// <summary>
 		/// Adds an entry to the civilization drop-down of the Rules screen. Choosing it selects that civilization there, so the Technologies tab shows its tech tree.
+		/// UiKit picks the civilization number so mods never collide: the key (e.g. "authorname.civname") becomes a fixed id (1000 and up), the same on every
+		/// machine, so multiplayer and saves agree. Read it back from <see cref="RulesCivilization.Id"/> to tag your own data.
 		/// </summary>
-		/// <param name="id">The civilization number (the game's own use 0..4). The mod's own civilization data must use the same number.</param>
+		/// <param name="key">Unique, stable name of the civilization, e.g. "authorname.civname".</param>
 		/// <param name="name">Text shown in the drop-down.</param>
 		/// <param name="techTree">
 		/// Returns the <c>TechTree</c> of that civilization. The game looks trees up in its own list (and throws for an unknown civilization), so this is used
-		/// whenever the game asks for the tree of <paramref name="id"/> - on the Rules screen and in the match. May be null if the mod adds the tree to the game's list itself.
+		/// whenever the game asks for the tree - on the Rules screen and in the match. May be null if the mod adds the tree to the game's list itself.
 		/// </param>
 		/// <param name="skinsLike">
-		/// The game sets a player's biome from the civilization with a switch over 0..4 and throws for anything else. For <paramref name="id"/> the biome and visuals
-		/// of this built-in civilization (0 Europe, 1 Middle East, 2 Viking, 3 Ancient, 4 Maya) are used instead; the civilization itself stays <paramref name="id"/>.
+		/// The game sets a player's biome from the civilization with a switch over 0..4 and throws for anything else. The biome and visuals of this built-in
+		/// civilization (0 Europe, 1 Middle East, 2 Viking, 3 Ancient, 4 Maya) are used instead; the civilization itself keeps its own id.
 		/// </param>
-		public static RulesCivilization AddCivilization(int id, string name, Func<GameTechTree> techTree = null, int skinsLike = 0) {
-			Core.Ensure();
-			if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("name is required", nameof(name));
-			return RulesRegistry.Add(id, name, techTree, skinsLike);
-		}
-
-		/// <summary>
-		/// Same as the other overload, but UiKit picks the number so mods never collide: the key (e.g. "authorname.civname") becomes a fixed id
-		/// (1000 and up), the same on every machine, so multiplayer and saves agree. Read it back from <see cref="RulesCivilization.Id"/> to tag your own data.
-		/// </summary>
 		public static RulesCivilization AddCivilization(string key, string name, Func<GameTechTree> techTree = null, int skinsLike = 0) {
 			Core.Ensure();
 			if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("key is required", nameof(key));

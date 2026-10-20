@@ -31,7 +31,7 @@ UiKit.Window(w => {
     w.Body.Button("+10", () => { hp += 10; label.SetText($"HP: {hp}"); });
     w.Body.Toggle("God mode", false, on => Log(on));
     w.Body.Horizontal(row => {
-        row.IconButton("hammer", () => Log("hi"), "Tooltip text").FixedW(32);
+        row.IconButton("hammer", () => Log("hi"), "Tooltip text");
         row.Button("Close", () => w.Close());
     }).FixedH(32);
 });
@@ -45,7 +45,7 @@ Icon names are the game's sprite names; list them with `Assets.SpriteNames("filt
 
 ```csharp
 UiKit.Window(w => {
-    w.Size(420, 520).Draggable().Closable();                    // Closable(): the game's own X button, top right
+    w.Size(420, 520).Draggable().Closable();                    // Closable(): the game's own X button, top right, in its own header row
 
     var map = w.Body.Image(texture).Filter(FilterMode.Point).FixedH(200);   // a RawImage; Refresh() after drawing into the texture
     map.OnPointer(e => {                                                     // Down, Up, Click, Move, Drag, Enter, Exit
@@ -61,16 +61,37 @@ UiKit.Window(w => {
 
 Windows are not draggable unless you call `Draggable()`, so a "locked" window is simply one without it.
 The mouse wheel is read directly from the Input System (only while the pointer is over an image or scroll view), because the game's UI does not deliver wheel events reliably.
-A picture is stretched to its rectangle: for square pixels give it a size with the texture's proportions, inside a `Horizontal` row so it is not widened (`row.Image(tex).Fixed(150)`).
 An image that has an `OnScroll` handler takes the wheel before a scroll view around it.
+
+### Wrapping text and a title bar
+
+```csharp
+UiKit.Window(w => {
+    w.Size(360, 520).Draggable().Fullscreenable().Closable().Title("Island Editor");   // title strip; Closable/Title in any order
+    w.TitleBar.Button("Help", () => ShowHelp());                    // buttons on the right of the strip (as wide as their text)
+    w.TitleBar.IconButton("hammer", Tools, "Tools");
+    w.FullscreenButton();                                           // optional "Full screen / Window" toggle in the strip
+
+    var text = w.Body.Paragraph(longText);                          // wraps at the width it gets, height follows the text
+    text.SetText(otherText);                                        // re-measures
+    w.Body.Label("Plain label").Wrap();                             // Label(...) is one fixed line unless you call Wrap() / AutoHeight()
+    w.Body.ScrollView(sv => sv.Paragraph(longText)).WeightH(1);     // also fine inside scroll views
+});
+```
+
+`Paragraph(text, fontSize = 16)` returns a `LabelHandle`; on it `Wrap(bool on = true)`, `AutoHeight(bool on = true)`, `Align(TextAlignmentOptions)`, `Left()`, `Center()`, `Right()`.
+A window body cuts content that does not fit; put long or changing text into a `ScrollView`. A scroll view stays at the top until the user scrolls, also while its content grows.
+A title that is too long is cut with "..." before it reaches the buttons; with `Closable()` the strip also keeps clear of the X.
+
+`Closable()` always gives the X its own header row (about 48 px) above the body, so content never runs under it; `Title` and `TitleBar` use the same row, so nothing is reserved twice.
+A window without `Closable`, `Title` and `TitleBar` has no header row and uses the full height. Icon and text buttons are the same height (32), so they line up in the title bar.
+A plain `Label` is one line and is cut with "..." when it is too long (use `Paragraph` or `.Wrap()` to wrap).
 
 ## Rules screen (civilizations)
 
 ```csharp
-UiKit.Rules.AddCivilization(10, "My civilization", () => myTechTree);   // Func<DiceKingdoms.Game.TechTree>
-
-// Several mods adding civilizations? Let UiKit choose the number so they never collide
-// (same key = same id on every machine, 1000 and up). Use civ.Id for your own data.
+// The key becomes the civilization's number: same key = same id on every machine, 1000 and up, so mods never collide.
+// Use civ.Id for your own data. The tech tree is a Func<DiceKingdoms.Game.TechTree>.
 var civ = UiKit.Rules.AddCivilization("authorname.mycivilization", "My civilization", () => myTechTree, skinsLike: 2);
 UiKit.Rules.Opened += screen => { /* the Rules screen was shown */ };
 ```
@@ -127,9 +148,5 @@ UiKit.Settings.AddHotspot("mymod.unlock", SettingsCorner.BottomLeft, 5, () => Un
 
 ## Troubleshooting
 
-Look in `BepInEx/LogOutput.log` for lines from UiKit. `native text button template not found` means the game screen with the template was not loaded yet; the
-library retries and falls back to its older hand-built widgets. Report issues with the log attached.
-
-
-### Pictures keep square pixels
-`row.Image(texture)` keeps the texture's proportions in any container (centered in the space it gets), so a 64x64 canvas is always square. `KeepAspect(false)` stretches it instead.
+Look in `BepInEx/LogOutput.log` for lines from UiKit. "template was not found" errors mean the game screen that holds the template was not loaded yet when the
+widget was created: create windows after the game's UI is up (for example from a button press). Report issues with the log attached.

@@ -103,14 +103,14 @@ public static class InterfaceAwakePatch {
 			var status = w.Body.Label("Native widgets");
 			w.Body.Toggle("Native checkbox", false, on => status.SetText($"Checkbox: {on}"));
 			w.Body.Horizontal(row => {
-				row.IconButton("hammer", () => status.SetText("Icon button"), "Native icon button").FixedW(32);
+				row.IconButton("hammer", () => status.SetText("Icon button"), "Native icon button");
 				row.Button("Text button", () => status.SetText("Text button"));
 			}).FixedH(32);
 		});
 		UiKit.Window(w => {
-			w.Size(420, 560).Position(520, 60).Draggable().Closable();
+			w.Size(420, 560).Position(520, 60).Draggable().Closable().Title("Painting");
 			var b = w.Body;
-			var status = b.Label("Move over / drag on the picture, wheel changes the brush").FixedH(22);
+			var status = b.Label("Move over / drag on the picture, wheel changes the brush");
 
 			const int N = 64;
 			var tex = new Texture2D(N, N, TextureFormat.RGBA32, false);
@@ -141,7 +141,33 @@ public static class InterfaceAwakePatch {
 			b.Dropdown(new[] { "First", "Second", "Third" }, 1, i => status.SetText($"Dropdown index {i}")).FixedH(32);
 			b.ScrollView(sv => {
 				for (int i = 1; i <= 20; i++) sv.Label($"Scrolling row {i}");
-			}).FixedH(110);
+			}).WeightH(1);   // fills what is left of the window
+		});
+
+		// Wrapping text and the title bar: a ~600 character paragraph, one inside a scroll view, one whose text is replaced by a much longer one.
+		const string Lorem = "Dice Kingdoms is a turn based strategy game where every civilization grows from a handful of tiles into a trading, building and fighting empire. " +
+			"This paragraph wraps at the width it gets: it is not given a pixel width by the caller and its height follows the wrapped text, so nothing runs out of the window and " +
+			"no empty gap is left below it. Resize the window with the Full screen button, or press the button below to swap in a text that is several times longer, and " +
+			"watch the height follow. The same paragraph is repeated inside the scroll view at the bottom, where it must keep the scrollbar in step with it.";
+		UiKit.Window(w => {
+			w.Size(360, 640).Position(980, 60).Draggable().Fullscreenable()
+				.Title("Title bar with a very long title that has to be cut with dots").Closable();   // Closable after Title; the order does not matter
+			w.TitleBar.Button("Hi", () => Plugin.Log.LogInfo("title bar button"));
+			w.FullscreenButton();
+
+			w.Body.Paragraph(Lorem);
+			// The text below is replaced by one three times as long. It sits in a scroll view: a fixed-size window cannot grow with its text,
+			// so long, changing text belongs in a ScrollView (anything that does not fit a window body is cut at the body, never drawn outside).
+			LabelHandle swap = null;
+			bool longer = false;
+			w.Body.Button("Swap text", () => { longer = !longer; swap.SetText(longer ? Lorem + " " + Lorem + " " + Lorem : Lorem); });
+			w.Body.ScrollView(sv => { swap = sv.Paragraph(Lorem); sv.Paragraph(Lorem, 14f); }).WeightH(1);
+		});
+		UiKit.Window(w => {
+			w.Size(300, 250).Position(980, 720).Draggable().Closable().Title("Closable first");   // Closable before Title
+			w.TitleBar.IconButton("hammer", () => Plugin.Log.LogInfo("icon in title bar"), "Title bar icon");
+			w.Body.Paragraph("A label can also wrap: Label(...).Wrap() turns word wrapping and auto height on.");
+			w.Body.Label("Wrapped label with Wrap(): a few more words so that it needs a second line in this narrow window.").Wrap();
 		});
     }
 	
@@ -157,7 +183,8 @@ public static class InterfaceAwakePatch {
 			s.Info("Rows above are clones of the game's own settings rows.");
 			for (int i = 1; i <= Plugin.DemoExtraRows.Value; i++) {
 				int n = i;
-				s.Toggle($"Extra row {n}", () => flag, v => flag = v);
+				bool on = false;   // each row has its own state
+				s.Toggle($"Extra row {n}", () => on, v => on = v);
 			}
 		});
 

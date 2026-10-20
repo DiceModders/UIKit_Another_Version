@@ -15,7 +15,6 @@ public sealed class DropdownHandle : ElementHandle<DropdownHandle> {
 	public TMP_Dropdown Dropdown { get; }
 
 	private readonly Action<int> _changed;
-	private readonly ButtonHandle _fallback;       // used only when the game's dropdown could not be cloned: a button that cycles through the options
 	private List<string> _options;
 	private int _index;
 	private bool _silent;
@@ -31,20 +30,6 @@ public sealed class DropdownHandle : ElementHandle<DropdownHandle> {
 		dropdown.onValueChanged = new TMP_Dropdown.DropdownEvent();
 		dropdown.onValueChanged.AddListener(native);
 		Il2CppDelegates.Hold(root.gameObject, new object[] { handler, native });
-		Rebuild();
-	}
-
-	internal DropdownHandle(RectTransform root, ButtonHandle fallback, IEnumerable<string> options, int index, Action<int> changed) : base(root) {
-		_fallback = fallback;
-		_changed = changed;
-		_options = new List<string>(options ?? Array.Empty<string>());
-		_index = Mathf.Clamp(index, 0, Math.Max(0, _options.Count - 1));
-		fallback.OnClick(() => {
-			if (_options.Count == 0) return;
-			_index = (_index + 1) % _options.Count;
-			Rebuild();
-			try { _changed?.Invoke(_index); } catch (Exception e) { UiLog.Error("dropdown: " + e); }
-		});
 		Rebuild();
 	}
 
@@ -69,7 +54,6 @@ public sealed class DropdownHandle : ElementHandle<DropdownHandle> {
 
 	public DropdownHandle SetInteractable(bool on) {
 		if (Dropdown != null) Dropdown.interactable = on;
-		_fallback?.SetInteractable(on);
 		return this;
 	}
 
@@ -82,10 +66,6 @@ public sealed class DropdownHandle : ElementHandle<DropdownHandle> {
 	}
 
 	private void Rebuild() {
-		if (_fallback != null) {
-			_fallback.SetText(Selected != null ? Selected + "  v" : "-");
-			return;
-		}
 		if (Dropdown == null) return;
 		_silent = true;
 		try {
@@ -99,7 +79,7 @@ public sealed class DropdownHandle : ElementHandle<DropdownHandle> {
 
 	// ------------------------------------------------------------------ creation
 
-	internal static DropdownHandle Create(RectTransform parent, IEnumerable<string> options, int index, Action<int> changed, Func<string, Action, ButtonHandle> makeFallbackButton) {
+	internal static DropdownHandle Create(RectTransform parent, IEnumerable<string> options, int index, Action<int> changed) {
 		var template = NativeTemplates.Dropdown();
 		if (template != null) {
 			try {
@@ -123,8 +103,6 @@ public sealed class DropdownHandle : ElementHandle<DropdownHandle> {
 			}
 			catch (Exception e) { UiLog.Warn("native dropdown failed: " + e.Message); }
 		}
-		UiLog.Once("legacy-dropdown", "native dropdown template not found - using a button that cycles through the entries.");
-		var button = makeFallbackButton("", null);
-		return new DropdownHandle(button.Root, button, options, index, changed);
+		throw new InvalidOperationException("UiKit: the game's dropdown template was not found (is the game's UI loaded?).");
 	}
 }

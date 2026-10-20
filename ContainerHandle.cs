@@ -8,14 +8,30 @@ namespace DiceModders.UiKit;
 public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 	internal ContainerHandle(RectTransform root) : base(root) { }
 
+	/// <summary>Set for a window's title bar: buttons there are as wide as their text instead of sharing the row.</summary>
+	internal bool TextSizedButtons;
+
 	public HorizontalOrVerticalLayoutGroup HVLayout => Root.GetComponent<HorizontalOrVerticalLayoutGroup>();
 	public GridLayoutGroup GridLayout               => Root.GetComponent<GridLayoutGroup>();
 
 	public LabelHandle Label(string text, float fontSize = 16f) {
 		var tmp = NativeText.Create(Root, "DM Label", text, fontSize, TextAlignmentOptions.Left);
+		tmp.enableWordWrapping = false;                      // one line of fixed height: a long text is cut with "..." (use Paragraph / Wrap() to wrap it)
+		tmp.overflowMode = TextOverflowModes.Ellipsis;
+		TextWrap.WatchWidth(tmp);                            // re-cut once the layout has given it its real width
 		var handle = new LabelHandle(tmp, tmp.rectTransform);
-		handle.FixedH(fontSize * 1.4f);
+		handle.FixedH(LabelHandle.LineHeight(tmp));
 		return handle;
+	}
+
+	/// <summary>
+	/// Text that wraps at the width it gets and is as tall as the wrapped text (top-left aligned). It needs no fixed width, works in a window body, a
+	/// <c>Vertical</c> or a scroll view, and re-measures when the width changes or <see cref="LabelHandle.SetText"/> is called.
+	/// </summary>
+	public LabelHandle Paragraph(string text, float fontSize = 16f) {
+		var tmp = NativeText.Create(Root, "DM Paragraph", text, fontSize, TextAlignmentOptions.TopLeft);
+		var handle = new LabelHandle(tmp, tmp.rectTransform);
+		return handle.Wrap(true);
 	}
 
 	/// <summary>
@@ -24,12 +40,11 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 	/// </summary>
 	public ButtonHandle Button(string text, Action onClick, float fontSize = 16f) {
 		var native = NativeButton.CreateLabel(Root, "DM Button", text, fontSize, onClick);
-		if (native == null) {
-			UiLog.Once("legacy-button", "native text button template not found - using a hand-built button (no cursor change / sounds).");
-			return LegacyButton(text, onClick, fontSize);
-		}
+		if (native == null) throw new InvalidOperationException("UiKit: the game's button template was not found (is the game's UI loaded?).");
 		var handle = new ButtonHandle(native.Rt, native.Face, native.Text?.TryCast<TextMeshProUGUI>(), native.UnityButton, native);
-		handle.FixedH(NativeButton.SlicedFit).WeightW(1f);
+		handle.FixedH(NativeButton.SlicedFit);
+		if (TextSizedButtons) handle.FixedW(Mathf.Max(64f, Mathf.Ceil(handle.Label != null ? handle.Label.GetPreferredValues(text ?? "").x : 0f) + 28f));
+		else handle.WeightW(1f);
 		return handle;
 	}
 
@@ -39,10 +54,7 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 
 	public ButtonHandle IconButton(Sprite icon, Action onClick, string tooltip = null) {
 		var native = NativeButton.CreateIcon(Root, "DM IconButton", icon, onClick, tooltip);
-		if (native == null) {
-			UiLog.Once("legacy-icon", "native icon button template not found - using a text button instead.");
-			return LegacyButton(icon != null ? "*" : "?", onClick, 16f).Fixed(NativeButton.SlicedFit);
-		}
+		if (native == null) throw new InvalidOperationException("UiKit: the game's icon button template was not found (is the game's UI loaded?).");
 		var handle = new ButtonHandle(native.Rt, native.Face, null, native.UnityButton, native);
 		native.FitIcon(NativeButton.SlicedFit);
 		handle.Fixed(NativeButton.SlicedFit);
@@ -61,15 +73,7 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 		lg.childForceExpandHeight = false;
 
 		var native = NativeToggle.Create(null, rt, value, onChanged);
-		if (native == null) {
-			UiLog.Once("legacy-toggle", "native checkbox template not found - using an On/Off button instead.");
-			UnityEngine.Object.Destroy(rt.gameObject);
-			ToggleHandle self = null;
-			var b = LegacyButton($"{text}: {(value ? "On" : "Off")}", () => self?.Flip(), fontSize);
-			self = new ToggleHandle(b.Root, b, text, value, onChanged);
-			self.FixedH(fontSize * 2).WeightW(1f);
-			return self;
-		}
+		if (native == null) { UnityEngine.Object.Destroy(rt.gameObject); throw new InvalidOperationException("UiKit: the game's checkbox template was not found (is the game's UI loaded?)."); }
 
 		var le = native.Go.GetComponent<LayoutElement>() ?? native.Go.AddComponent<LayoutElement>();
 		le.minWidth = le.preferredWidth = 28f;
@@ -78,46 +82,6 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 		caption.WeightW(1f);
 		var handle = new ToggleHandle(rt, caption.Text, native);
 		handle.FixedH(32f).WeightW(1f);
-		return handle;
-	}
-
-	/// <summary>Hand-built fallback used only when the game's own button templates cannot be found (no cursor change, no sounds).</summary>
-	private ButtonHandle LegacyButton(string text, Action onClick, float fontSize) {
-		var rt = UiFactory.NewRect("DM Button (fallback)", Root);
-
-		var bg = rt.gameObject.AddComponent<Image>();
-		var normal = Assets.ButtonBg(Assets.ButtonVariant.Regular, Assets.ButtonState.Ready);
-		var hover  = Assets.ButtonBg(Assets.ButtonVariant.Regular, Assets.ButtonState.Hovered);
-		var press  = Assets.ButtonBg(Assets.ButtonVariant.Regular, Assets.ButtonState.Pressed);
-
-		if (normal != null) {
-			bg.sprite = normal;
-			bg.type = UnityEngine.UI.Image.Type.Sliced;
-			bg.color = Color.white;
-		}
-		else bg.color = new Color(0.20f, 0.17f, 0.13f, 0.95f);
-
-		var btn = rt.gameObject.AddComponent<Button>();
-		btn.targetGraphic = bg;
-
-		if (normal != null && hover != null && press != null) {
-			btn.transition = Selectable.Transition.SpriteSwap;
-			var st = btn.spriteState;
-			st.highlightedSprite = hover;
-			st.pressedSprite     = press;
-			st.selectedSprite    = normal;
-			st.disabledSprite    = Assets.ButtonBg(Assets.ButtonVariant.Regular, Assets.ButtonState.Disabled) ?? normal;
-			btn.spriteState      = st;
-		}
-
-		UiFactory.AttachClick(btn, onClick);
-
-		var label = UiFactory.MakeText(rt, "DM Label", text ?? "", fontSize, TextAlignmentOptions.Center);
-		UiFactory.Stretch(label.rectTransform);
-		label.raycastTarget = false;
-
-		var handle = new ButtonHandle(rt, bg, label, btn);
-		handle.FixedH(fontSize * 2).WeightW(1f);
 		return handle;
 	}
 
@@ -146,7 +110,7 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 
 	/// <summary>A drop-down list in the game's own style (a clone of its Language dropdown). <paramref name="onChanged"/> gets the chosen index.</summary>
 	public DropdownHandle Dropdown(System.Collections.Generic.IEnumerable<string> options, int index, Action<int> onChanged)
-		=> DropdownHandle.Create(Root, options, index, onChanged, (t, a) => LegacyButton(t, a, 16f).FixedH(32f).WeightW(1f));
+		=> DropdownHandle.Create(Root, options, index, onChanged);
 
 	/// <summary>
 	/// A scrolling area: <paramref name="build"/> fills its <see cref="ScrollHandle.Content"/>. A scrollbar of the game's art appears when the content is taller
