@@ -116,6 +116,10 @@ public static class InterfaceAwakePatch {
 			s.Stepper("Demo level", () => level.ToString(), d => level = System.Math.Clamp(level + d, 0, 10));
 			s.Button("Demo action", "Run", () => Plugin.Log.LogInfo("UiKit demo settings button clicked"));
 			s.Info("Rows above are clones of the game's own settings rows.");
+			for (int i = 1; i <= Plugin.DemoExtraRows.Value; i++) {
+				int n = i;
+				s.Toggle($"Extra row {n}", () => flag, v => flag = v);
+			}
 		});
 	}
 }
@@ -125,10 +129,12 @@ public static class InterfaceAwakePatch {
 public class Plugin : BasePlugin {
     internal static new ManualLogSource Log;
     internal static BepInEx.Configuration.ConfigEntry<bool> DemoEnabled;
+    internal static BepInEx.Configuration.ConfigEntry<int> DemoExtraRows;
 
     public override void Load() {
         Log = base.Log;
 		DemoEnabled = Config.Bind("Demo", "Enabled", false, "Show the demo windows, top bar button and settings rows (for testing the library; off by default).");
+		DemoExtraRows = Config.Bind("Demo", "ExtraRows", 0, "Adds this many extra toggle rows to the demo settings block (to test scrolling and the Close button shift).");
 		UiKit.Init();
 		if (DemoEnabled.Value) InterfaceAwakePatch.RegisterDemoExtras();
 		var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);

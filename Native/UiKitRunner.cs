@@ -31,12 +31,14 @@ internal sealed class UiKitRunner : MonoBehaviour {
 	}
 
 	public void Update() {
+		SettingsCloseShift.Frame();   // per frame, but returns at once unless a Settings tab with a scrollbar is open
 		float now = Time.unscaledTime;
 		if (now < _next) return;
 		_next = now + 0.25f;
 		try {
 			UiKit.TopBar.Tick(now);
 			SettingsLive.Tick(now);
+			SettingsCloseShift.Tick();
 			if (now >= _nextSweep) { _nextSweep = now + 10f; Il2CppDelegates.Sweep(); }
 		}
 		catch (Exception e) { UiLog.Once("runner:" + e.GetType().Name, "tick failed: " + e); }
