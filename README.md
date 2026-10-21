@@ -153,7 +153,18 @@ UiKit.Settings.Add(SettingsTab.Game, "My Mod", s => {
 ```
 
 The callback runs each time the game rebuilds that tab (a postfix on `SettingSetInterface.GenerateElements`), so no scanning is needed. Toggle and
-stepper rows refresh while the screen is open. Tabs: `Video`, `Audio`, `Input`, `Game` and `Lobby` (the settings box of the match-start screen).
+stepper rows refresh while the screen is open.
+
+A number between two limits is best shown with the game's own slider (the control of its Frame Rate Limit setting):
+
+```csharp
+s.Slider("Speed", min: 1, max: 5, get: () => speed, set: v => speed = (int)v, wholeNumbers: true, format: "0");
+// optional last argument: new SettingsRowOptions { Enabled = () => canEdit, Visible = () => shown }
+```
+
+The slider fits the width of the column it is in (it is laid out again when the real width is known), so it never runs under the scrollbar.
+
+Tabs: `Video`, `Audio`, `Input`, `Game` and `Lobby` (the settings box of the match-start screen).
 
 Rows can be disabled or hidden while the screen is open (both callbacks are re-read four times a second):
 

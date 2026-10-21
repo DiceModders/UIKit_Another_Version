@@ -103,6 +103,10 @@ public sealed class SliderHandle : ElementHandle<SliderHandle> {
 			go.transform.SetParent(parent, false);
 			go.SetActive(true);
 
+			// the handle sticks out about half its width past the ends of the track, and the donor's track runs to the right edge of its row: pull it in so the handle is not cut off
+			var track = slider.GetComponent<RectTransform>();
+			if (track != null) track.offsetMax = new Vector2(track.offsetMax.x - 10f, track.offsetMax.y);
+
 			slider.minValue = min; slider.maxValue = max;
 			slider.value = Mathf.Clamp(value, min, max);
 

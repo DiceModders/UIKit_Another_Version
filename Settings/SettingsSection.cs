@@ -66,6 +66,12 @@ public sealed class SettingsSection {
 		return this;
 	}
 
+	/// <summary>A row with the game's own slider. <paramref name="get"/> is read now and while the screen is open; <paramref name="set"/> runs when the player drags.</summary>
+	public SettingsSection Slider(string label, float min, float max, Func<float> get, Action<float> set, bool wholeNumbers = false, string format = "0.##", SettingsRowOptions options = null) {
+		Bind(SettingsBuilder.AddSlider(_set, NextName("Slider"), label, min, max, wholeNumbers, format, get, set, options?.Enabled), options);
+		return this;
+	}
+
 	/// <summary>A "-" / value / "+" row that can be disabled or hidden by <paramref name="options"/>.</summary>
 	public SettingsSection Stepper(string label, Func<string> valueText, Action<int> step, SettingsRowOptions options) {
 		Bind(SettingsBuilder.AddStepper(_set, NextName("Stepper"), label, valueText, step, options?.Enabled), options);

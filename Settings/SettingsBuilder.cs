@@ -82,33 +82,41 @@ internal static class SettingsBuilder {
 		var holder = entry.contentHolder;
 		var label = NativeText.Create(holder, name + " Text", text, 16f, TextAlignmentOptions.TopLeft);
 		label.enableWordWrapping = true;
+		label.margin = new Vector4(0f, 0f, InfoRightMargin, 0f);   // holds even when the holder's layout group resizes the label
 		var rt = label.rectTransform;
 		rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-		rt.offsetMin = new Vector2(ContentLeft, 0f); rt.offsetMax = new Vector2(-ScrollbarReserve, 0f);   // keep clear of the scrollbar
+		rt.offsetMin = new Vector2(ContentLeft, 0f); rt.offsetMax = new Vector2(-(ScrollbarReserve + InfoRightMargin), 0f);   // keep clear of the scrollbar
 
 		var le = entry.GetComponent<LayoutElement>() ?? entry.gameObject.AddComponent<LayoutElement>();
 		void Fit(string value) {
-			float width = ColumnWidth(holder) - ContentLeft;   // ColumnWidth already excludes the scrollbar
+			float width = ColumnWidth(holder) - ContentLeft - InfoRightMargin;   // ColumnWidth already excludes the scrollbar
 			float height = label.GetPreferredValues(value ?? "", width, 0f).y + 8f;
 			le.minHeight = height;
 			le.preferredHeight = height;
 		}
-		float first = label.GetPreferredValues(text ?? "", ColumnWidth(holder) - ContentLeft, 0f).y + 8f;
+		float first = label.GetPreferredValues(text ?? "", ColumnWidth(holder) - ContentLeft - InfoRightMargin, 0f).y + 8f;
 		le.minHeight = Mathf.Max(le.minHeight, first);
 		le.preferredHeight = Mathf.Max(le.preferredHeight, first);
-		if (live != null) {
-			entry.gameObject.SetActive(!string.IsNullOrEmpty(text));
-			string shown = text;
-			SettingsLive.Add(entry, () => {
-				string now = SafeText(live);
-				if (now == shown) return;
-				shown = now;
+		// The column width is not known until the layout has run (the lobby tab's column is 305 wide, the other tabs' 500), so the height is measured again
+		// on the first refresh and whenever the width changes; live text is re-read at the same time.
+		bool isLive = live != null;
+		if (isLive) entry.gameObject.SetActive(!string.IsNullOrEmpty(text));
+		string shown = text;
+		float lastWidth = -1f;
+		SettingsLive.Add(entry, () => {
+			string now = isLive ? SafeText(live) : shown;
+			float width = ColumnWidth(holder);
+			bool widthChanged = Mathf.Abs(width - lastWidth) > 1f;
+			if (now == shown && !widthChanged) return;
+			shown = now;
+			lastWidth = width;
+			if (isLive) {
 				label.text = now;
-				Fit(now);
 				entry.gameObject.SetActive(!string.IsNullOrEmpty(now));
-				Rebuild(set);
-			});
-		}
+			}
+			Fit(now);
+			Rebuild(set);
+		});
 		Rebuild(set);
 		return entry.gameObject;
 	}
@@ -136,11 +144,10 @@ internal static class SettingsBuilder {
 	public static void AddButtons(GameSetInterface set, string name, string label, (string text, Action onClick)[] buttons) {
 		var entry = NewEntry(set, name, label);
 		if (entry == null) return;
-		var holder = entry.contentHolder;
-		EnsureRow(holder);
+		var holder = EnsureControlRow(entry.contentHolder);
 		// every button gets at most an equal share of the column (minus the scrollbar), so nothing ever runs under it; longer texts shrink to fit
 		int count = Mathf.Max(1, buttons.Length);
-		float share = (ColumnWidth(holder) - ContentLeft - RowSpacing * (count - 1)) / count;
+		float share = (ColumnWidth(entry.contentHolder) - ContentLeft - RowSpacing * (count - 1)) / count;
 		foreach (var (text, onClick) in buttons) {
 			var click = onClick;
 			var b = NativeButton.CreateLabel(holder, name + " " + text, text, 16f, () => {
@@ -159,18 +166,16 @@ internal static class SettingsBuilder {
 	public static GameObject AddStepper(GameSetInterface set, string name, string label, Func<string> valueText, Action<int> step, Func<bool> enabled = null) {
 		var entry = NewEntry(set, name, label);
 		if (entry == null) return null;
-		var holder = entry.contentHolder;
-		EnsureRow(holder);
+		var holder = FixedRow(entry.contentHolder);   // controls are placed by hand: whatever layout the game's holder has cannot stretch them apart
 
 		TMP_Text value = null;   // shown between the buttons; both buttons refresh it at once instead of waiting for the live refresh
 		var minus = NativeButton.CreateLabel(holder, name + " Minus", "-", 20f, () => { Step(step, -1); if (value != null) value.text = SafeText(valueText); });
-		minus?.SetSize(StepButtonWidth, NativeButton.Height);
-
-		value = NativeText.Create(holder, name + " Value", SafeText(valueText), 16f, TextAlignmentOptions.Center);
-		var le = value.gameObject.AddComponent<LayoutElement>();
-		le.preferredWidth = ValueWidth; le.minWidth = ValueWidth; le.preferredHeight = NativeButton.Height;
 		var plus = NativeButton.CreateLabel(holder, name + " Plus", "+", 20f, () => { Step(step, +1); value.text = SafeText(valueText); });
-		plus?.SetSize(StepButtonWidth, NativeButton.Height);
+		value = NativeText.Create(holder, name + " Value", SafeText(valueText), 16f, TextAlignmentOptions.Center);
+		float x = ContentLeft;
+		if (minus != null) { Place(minus.Rt, x, StepButtonWidth, NativeButton.Height); x += StepButtonWidth + RowSpacing; }
+		Place(value.rectTransform, x, ValueWidth, NativeButton.Height); x += ValueWidth + RowSpacing;
+		if (plus != null) Place(plus.Rt, x, StepButtonWidth, NativeButton.Height);
 		if (enabled != null) { bool on = SafeGet(enabled); minus?.SetInteractable(on); plus?.SetInteractable(on); }
 		SettingsLive.Add(entry, () => {
 			value.text = SafeText(valueText);
@@ -180,7 +185,80 @@ internal static class SettingsBuilder {
 		return entry.gameObject;
 	}
 
+	/// <summary>A row of fixed height that does not rely on the holder's own layout; children are positioned with <see cref="Place"/>.</summary>
+	private static RectTransform FixedRow(RectTransform holder) {
+		var row = UiFactory.NewRect("DM Control Row", holder);
+		row.anchorMin = Vector2.zero; row.anchorMax = Vector2.one; row.offsetMin = Vector2.zero; row.offsetMax = Vector2.zero;
+		var le = row.gameObject.AddComponent<LayoutElement>();
+		le.minHeight = le.preferredHeight = NativeButton.Height;
+		le.flexibleWidth = 1f;
+		return row;
+	}
+
+	/// <summary>Left aligned, vertically centred, fixed size.</summary>
+	private static void Place(RectTransform rt, float x, float width, float height) {
+		if (rt == null) return;
+		rt.anchorMin = new Vector2(0f, 0.5f); rt.anchorMax = new Vector2(0f, 0.5f); rt.pivot = new Vector2(0f, 0.5f);
+		rt.sizeDelta = new Vector2(width, height);
+		rt.anchoredPosition = new Vector2(x, 0f);
+	}
+
 	private const float RowSpacing = 6f;
+	/// <summary>A row with the game's own slider (the control of its Frame Rate Limit setting): <paramref name="get"/> is re-read four times a second, <paramref name="setValue"/> runs when the player drags.</summary>
+	/// <param name="format">.NET number format of the value text, e.g. "0" or "0.0".</param>
+	public static GameObject AddSlider(GameSetInterface set, string name, string label, float min, float max, bool wholeNumbers, string format, Func<float> get, Action<float> setValue, Func<bool> enabled = null) {
+		var entry = NewEntry(set, name, label);
+		if (entry == null) return null;
+		var row = FixedRow(entry.contentHolder);
+		SliderHandle slider;
+		try {
+			slider = SliderHandle.Create(row, min, max, SafeGet(get), v => {
+				try { setValue?.Invoke(v); }
+				catch (Exception e) { UiLog.Error($"settings slider '{label}': {e}"); }
+			}, format);
+		}
+		catch (Exception e) { UiLog.Once("settings:slider", "settings: no native slider template found: " + e.Message); return entry.gameObject; }
+		if (wholeNumbers) slider.WholeNumbers();
+		float height = NativeButton.Height;   // the handle is as tall as the track's rectangle: keep it the height of the game's other controls
+		var rowLe = row.GetComponent<LayoutElement>();
+		rowLe.minHeight = rowLe.preferredHeight = height;
+
+		// The game's slider row is built for a wider column (value text, then the track): lay its two parts out inside the width we have, so the track ends before the scrollbar.
+		// The column's width is not known until the layout has run (a guess of 500 is used until then), so this runs again when the width changes.
+		var group = slider.Root.GetComponent<HorizontalOrVerticalLayoutGroup>();
+		if (group != null) group.enabled = false;
+		var track = slider.Slider != null ? slider.Slider.GetComponent<RectTransform>() : null;
+		var text = slider.ValueText != null ? slider.ValueText.rectTransform : null;
+		const float valueWidth = 34f;
+		float lastWidth = -1f;
+		void Fit() {
+			float holderWidth = ColumnWidth(entry.contentHolder);
+			if (Mathf.Abs(holderWidth - lastWidth) < 1f) return;
+			lastWidth = holderWidth;
+			float width = Mathf.Max(120f, holderWidth - ContentLeft - InfoRightMargin);
+			Place(slider.Root, ContentLeft, width, height);
+			if (text != null && text.parent == slider.Root) Place(text, 0f, valueWidth, height);
+			if (track != null && track.parent == slider.Root) {
+				track.anchorMin = new Vector2(0f, 0.5f); track.anchorMax = new Vector2(1f, 0.5f); track.pivot = new Vector2(0.5f, 0.5f);
+				// the handle is as tall as the track's rectangle and as wide as the game made it: a rectangle as tall as the handle is wide keeps it round
+				float round = slider.Slider.handleRect != null && slider.Slider.handleRect.rect.width > 4f ? slider.Slider.handleRect.rect.width : 20f;
+				track.offsetMin = new Vector2(valueWidth + RowSpacing, -round / 2f);
+				track.offsetMax = new Vector2(-8f, round / 2f);
+			}
+		}
+		Fit();
+		WindowProbe.DescribeOnce("settings slider row", slider.Root);
+		if (enabled != null) slider.SetInteractable(SafeGet(enabled));
+		SettingsLive.Add(entry, () => {
+			Fit();
+			slider.SetValue(SafeGet(get));
+			if (enabled != null) slider.SetInteractable(SafeGet(enabled));
+		});
+		Rebuild(set);
+		return entry.gameObject;
+	}
+
+	private const float InfoRightMargin = 14f;   // extra air between a description and the scrollbar
 	private const float ScrollbarReserve = 24f;   // the game's vertical scrollbar sits at the right edge of the column
 
 	/// <summary>Usable width of a content column: its width minus the scrollbar (falls back to the native 500 when the layout has not run yet).</summary>
@@ -194,11 +272,36 @@ internal static class SettingsBuilder {
 		catch (Exception e) { UiLog.Error("settings stepper: " + e); }
 	}
 
+	private static bool _lobbyScrollFitted;
+	/// <summary>
+	/// The lobby's settings box (not the Settings window) clips its rows with a rectangle as big as the whole frame, so a row scrolled to the edge is drawn over the frame's yellow border,
+	/// and its scrollbar's shadow reaches past the frame at the bottom. Both are only visible once a mod adds rows that make the box scroll. The clip is pulled in by the border's width and the scrollbar
+	/// stopped a few units short of the bottom, once.
+	/// </summary>
+	private static void FitLobbyScroll(ScrollRect scroll) {
+		if (_lobbyScrollFitted || scroll == null) return;
+		if (scroll.GetComponentInParent<DiceKingdoms.Meta.SettingSetsInterface>() != null) return;   // the Settings window has its own frame
+		_lobbyScrollFitted = true;
+		try {
+			var mask = scroll.viewport != null ? scroll.viewport.GetComponent<RectMask2D>() : null;
+			if (mask != null) mask.padding = new Vector4(0f, ClipInset, 0f, ClipInset);   // left, bottom, right, top
+			var bar = scroll.verticalScrollbar != null ? scroll.verticalScrollbar.GetComponent<RectTransform>() : null;
+			if (bar != null) { bar.offsetMin = new Vector2(bar.offsetMin.x, bar.offsetMin.y + BorderInset); bar.offsetMax = new Vector2(bar.offsetMax.x, bar.offsetMax.y - BorderInset); }
+			UiLog.Info("settings: lobby box clip pulled in by " + ClipInset + " and scrollbar by " + BorderInset + " units");
+		}
+		catch (Exception e) { UiLog.Warn("lobby scroll fit failed: " + e.Message); }
+	}
+	private const float BorderInset = 4f;   // the scrollbar, so its shadow stays inside the frame
+	private const float ClipInset = 2f;     // the rows: just the width of the frame's border, so no black stripe is left
+
 	private static GameEntry NewEntry(GameSetInterface set, string name, string label) {
 		var prefab = set.settingEntryInterfacePrefab;
 		if (prefab == null) { UiLog.Once("settings:entry", "settings: settingEntryInterfacePrefab missing"); return null; }
 		var entry = UnityEngine.Object.Instantiate(prefab, set.holder);
 		entry.gameObject.name = name;
+		var scroll = entry.GetComponentInParent<ScrollRect>();   // logged once: sizes of the scroll view, its viewport and its scrollbar (and the scrollbar's shadow)
+		FitLobbyScroll(scroll);
+		if (scroll != null) WindowProbe.DescribeOnce("settings scroll view of '" + set.name + "'", scroll.transform.parent != null ? scroll.transform.parent : scroll.transform);
 		SetLabel(entry.label?.visual, label);
 		var caption = entry.label?.visual;
 		if (caption != null) { caption.enableWordWrapping = false; caption.overflowMode = TextOverflowModes.Ellipsis; }   // a long caption is cut with "..." instead of growing the row
@@ -225,6 +328,27 @@ internal static class SettingsBuilder {
 		h.padding = new RectOffset((int)ContentLeft, 0, 0, 0);
 	}
 
+	/// <summary>
+	/// The rectangle that several controls (the "-" value "+" of a stepper, a row of buttons) are placed in, side by side. The game's other tabs give a row a plain
+	/// content holder, but the lobby tab's holder is a vertical layout group, which would stack the controls: there they go into a horizontal row of their own.
+	/// </summary>
+	private static RectTransform EnsureControlRow(RectTransform holder) {
+		if (holder == null) return null;
+		var existing = holder.GetComponent<HorizontalOrVerticalLayoutGroup>();
+		if (existing == null) { EnsureRow(holder); return holder; }   // any layout group of the game's (vertical stacks the controls, horizontal may stretch them) gets a row of its own
+		var row = UiFactory.NewRect("DM Control Row", holder);
+		var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+		h.childAlignment = TextAnchor.MiddleLeft;
+		h.childControlWidth = false; h.childControlHeight = false;
+		h.childForceExpandWidth = false; h.childForceExpandHeight = false;
+		h.spacing = RowSpacing;
+		h.padding = new RectOffset((int)ContentLeft, 0, 0, 0);
+		var le = row.gameObject.AddComponent<LayoutElement>();
+		le.minHeight = le.preferredHeight = NativeButton.Height;
+		le.flexibleWidth = 1f;
+		return row;
+	}
+
 	/// <summary>An empty row at the end of a tab, as tall as the game's Close button, so the last row can be scrolled clear of it.</summary>
 	public static void AddBottomSpacer(GameSetInterface set, float height) {
 		var rt = UiFactory.NewRect("DM Settings Spacer", set.holder);
@@ -239,5 +363,6 @@ internal static class SettingsBuilder {
 	}
 
 	private static bool SafeGet(Func<bool> get) { try { return get != null && get(); } catch (Exception e) { UiLog.Once("settings:get", "settings getter: " + e.Message); return false; } }
+	private static float SafeGet(Func<float> get) { try { return get != null ? get() : 0f; } catch (Exception e) { UiLog.Once("settings:get", "settings getter: " + e.Message); return 0f; } }
 	private static string SafeText(Func<string> f) { try { return f?.Invoke() ?? ""; } catch (Exception e) { UiLog.Once("settings:text", "settings value text: " + e.Message); return ""; } }
 }

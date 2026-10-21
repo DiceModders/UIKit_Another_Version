@@ -34,6 +34,19 @@ internal static class WindowProbe {
 		catch (Exception e) { UiLog.Warn("window probe failed: " + e.Message); }
 	}
 
+	/// <summary>Logs the object tree under <paramref name="root"/> once per <paramref name="key"/> (always on; used where a layout is not yet understood).</summary>
+	public static void DescribeOnce(string key, Transform root) {
+		if (root == null || !Done.Add(key)) return;
+		try {
+			var sb = new StringBuilder("tree '" + key + "':");
+			int lines = 0;
+			Walk(root, 0, sb, ref lines);
+			UiLog.Info(sb.ToString());
+		}
+		catch (Exception e) { UiLog.Warn("describe failed: " + e.Message); }
+	}
+	private static readonly System.Collections.Generic.HashSet<string> Done = new();
+
 	private static void Walk(Transform t, int depth, StringBuilder sb, ref int lines) {
 		if (depth > MaxDepth || lines > MaxLines) return;
 		var rt = t.GetComponent<RectTransform>();
