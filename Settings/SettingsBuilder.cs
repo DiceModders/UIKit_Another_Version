@@ -88,38 +88,53 @@ internal static class SettingsBuilder {
 		rt.offsetMin = new Vector2(ContentLeft, 0f); rt.offsetMax = new Vector2(-(ScrollbarReserve + InfoRightMargin), 0f);   // keep clear of the scrollbar
 
 		var le = entry.GetComponent<LayoutElement>() ?? entry.gameObject.AddComponent<LayoutElement>();
-		void Fit(string value) {
-			float width = ColumnWidth(holder) - ContentLeft - InfoRightMargin;   // ColumnWidth already excludes the scrollbar
-			float height = label.GetPreferredValues(value ?? "", width, 0f).y + 8f;
+
+		// The row must be as tall as the text is when drawn. Once the label has a real width (after the first layout) the text is laid out and measured
+		// exactly as it is shown (line breaks included); before that the preferred height for the computed column width is used.
+		float Measure(string value, out float labelWidth, out int lines) {
+			labelWidth = label.rectTransform.rect.width;
+			lines = 0;
+			if (entry.gameObject.activeInHierarchy && labelWidth > 1f) {
+				label.ForceMeshUpdate(true, true);
+				lines = label.textInfo != null ? label.textInfo.lineCount : 0;
+				return label.textBounds.size.y + 8f;
+			}
+			float width = ColumnWidth(holder) - ContentLeft - InfoRightMargin;
+			return label.GetPreferredValues(value ?? "", width, 0f).y + 8f;
+		}
+		void Apply(float height) {
 			le.minHeight = height;
 			le.preferredHeight = height;
 		}
-		float first = label.GetPreferredValues(text ?? "", ColumnWidth(holder) - ContentLeft - InfoRightMargin, 0f).y + 8f;
-		le.minHeight = Mathf.Max(le.minHeight, first);
-		le.preferredHeight = Mathf.Max(le.preferredHeight, first);
-		// The column width is not known until the layout has run (the lobby tab's column is 305 wide, the other tabs' 500), so the height is measured again
-		// on the first refresh and whenever the width changes; live text is re-read at the same time.
+		float lastHeight = Measure(text, out _, out _);
+		Apply(lastHeight);
 		bool isLive = live != null;
 		if (isLive) entry.gameObject.SetActive(!string.IsNullOrEmpty(text));
 		string shown = text;
-		float lastWidth = -1f;
+		// The column width is not known until the layout has run, and a wrapped paragraph changes height with it, so the height is measured again on every
+		// refresh (four times a second) and the layout is rebuilt only when it changed; live text is re-read at the same time.
 		SettingsLive.Add(entry, () => {
 			string now = isLive ? SafeText(live) : shown;
-			float width = ColumnWidth(holder);
-			bool widthChanged = Mathf.Abs(width - lastWidth) > 1f;
-			if (now == shown && !widthChanged) return;
-			shown = now;
-			lastWidth = width;
-			if (isLive) {
-				label.text = now;
-				entry.gameObject.SetActive(!string.IsNullOrEmpty(now));
+			bool textChanged = now != shown;
+			if (textChanged) {
+				shown = now;
+				if (isLive) {
+					label.text = now;
+					entry.gameObject.SetActive(!string.IsNullOrEmpty(now));
+				}
 			}
-			Fit(now);
+			float height = Measure(shown, out float labelWidth, out int lines);
+			if (!textChanged && Mathf.Abs(height - lastHeight) < 0.5f) return;
+			lastHeight = height;
+			if (_infoLogs++ < 12) UiLog.Info($"settings info '{name}': label width {labelWidth:0.#}, {lines} line(s), row height {height:0.#}");
+			Apply(height);
 			Rebuild(set);
 		});
 		Rebuild(set);
 		return entry.gameObject;
 	}
+
+	private static int _infoLogs;
 
 	/// <param name="enabled">When given, the checkbox is only clickable while it returns true (re-read four times a second).</param>
 	public static GameObject AddToggle(GameSetInterface set, string name, string label, Func<bool> get, Action<bool> setValue, Func<bool> enabled = null) {
