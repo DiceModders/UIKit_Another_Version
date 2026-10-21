@@ -3,18 +3,43 @@
 A small library for BepInEx 6 (IL2CPP) mods. Everything it shows is a **clone of the game's own UI**: the same buttons, sprites, fonts, tooltips,
 sounds and cursor changes, so mod UI looks and behaves like the game. Several mods can use it side by side.
 
+UiKit is only the **interface**: one entry point (one canvas, one asset cache, one API) for adding to the game's screens. Game and networking logic (the Steam lobby, lobby rules,
+civilizations) is [ModCore](https://github.com/superartyom/DiceKingdoms-ModCore); the small [ModBridge](https://github.com/superartyom/DiceKingdoms-ModBridge) plugin shows ModCore's data in UiKit's screens. The libraries do not depend on each other.
+
 | You want | Use |
 |---|---|
 | A window with buttons, labels, toggles, layouts | `UiKit.Window(...)` |
 | A button in the top-right bar (next to Rules / Settings) | `UiKit.TopBar.Add(...)` |
 | Rows in the game's Settings screen | `UiKit.Settings.Add(...)` |
 
-## Setup
+## Install (players)
 
-1. Link the game's interop assemblies once: `scripts\link-interop.ps1 "E:\SteamLibrary\steamapps\common\Dice-Kingdoms"` (creates `interop/`, which is git-ignored).
-2. `dotnet build -c Release`, copy `DiceModders.UiKit.dll` to `BepInEx/plugins`.
-3. In your mod: reference `DiceModders.UiKit.dll` and add `[BepInDependency("<UiKit plugin guid>")]` (the guid is `MyPluginInfo.PLUGIN_GUID`, generated from the assembly name).
-4. Demo content (windows, a top bar button, a "UiKit demo" settings block) is controlled by `BepInEx/config/*UiKit*.cfg` -> `[Demo] Enabled`. It is off by default; set it to `true` to see the demo.
+Copy `DiceModders.UiKit.dll` into `Dice-Kingdoms\BepInEx\plugins`. Mods that use UiKit list it as a dependency, so mod managers install it for you.
+
+## Build from source
+
+Requirements: .NET SDK 6 or newer, the game installed with BepInEx 6 (IL2CPP) and started once (this generates `BepInEx\interop`).
+
+```powershell
+git clone https://github.com/superartyom/DiceKingdoms-UiKit
+cd DiceKingdoms-UiKit
+.\scripts\link-interop.ps1 "E:\SteamLibrary\steamapps\common\Dice-Kingdoms"    # creates .\interop (git-ignored)
+dotnet build -c Release --no-incremental
+Copy-Item bin\Release\net6.0\DiceModders.UiKit.dll "E:\SteamLibrary\steamapps\common\Dice-Kingdoms\BepInEx\plugins" -Force
+```
+
+Demo content (windows, a top bar button, a "UiKit demo" settings block) is controlled by `BepInEx/config/DiceModders.UiKit.cfg` -> `[Demo] Enabled` (off by default).
+Debug helpers in the same file: `[Debug] ShowInvisible` (draws invisible hotspots), `[Debug] DumpSpriteNames` (writes `BepInEx/uikit-sprites.txt`, the list of icon names).
+
+## Write a mod with it
+
+1. Follow **[docs/EXAMPLE_MOD.md](docs/EXAMPLE_MOD.md)** (a complete minimal plugin) or the longer tutorial in ModBridge's `docs/FIRST_MOD.md` (all three libraries).
+2. Reference `DiceModders.UiKit.dll` with `Private=false`, and add `[BepInDependency("DiceModders.UiKit")]` to your plugin.
+3. **Name clash:** the namespace `DiceModders.UiKit` contains a class `UiKit`. Inside a namespace that starts with `DiceModders.` write
+   `using Ui = DiceModders.UiKit.UiKit;` and call `Ui.Window(...)`, `Ui.TopBar...`; elsewhere `using DiceModders.UiKit;` and `UiKit.Window(...)` work directly.
+4. Ids (top bar, settings blocks, hotspots, scoreboard columns) are shared by all mods: prefix them with your name.
+5. `UiKit.Window(...)` needs the game's UI to exist, so call it from a click handler, not from `Load()`. Registrations (`TopBar.Add`, `Settings.Add`, ...) may happen in `Load()`.
+6. Find icon names with `[Debug] DumpSpriteNames = true` (see above) or `Assets.SpriteNames("filter")`.
 
 ## For mod authors / Thunderstore
 
@@ -87,18 +112,16 @@ A title that is too long is cut with "..." before it reaches the buttons; with `
 A window without `Closable`, `Title` and `TitleBar` has no header row and uses the full height. Icon and text buttons are the same height (32), so they line up in the title bar.
 A plain `Label` is one line and is cut with "..." when it is too long (use `Paragraph` or `.Wrap()` to wrap).
 
-## Rules screen (civilizations)
+## Rules screen
 
 ```csharp
-// The key becomes the civilization's number: same key = same id on every machine, 1000 and up, so mods never collide.
-// Use civ.Id for your own data. The tech tree is a Func<DiceKingdoms.Game.TechTree>.
-var civ = UiKit.Rules.AddCivilization("authorname.mycivilization", "My civilization", () => myTechTree, skinsLike: 2);
+// an entry in the civilization drop-down of the Rules screen; picking it selects that civilization number
+UiKit.Rules.AddCivilizationEntry(civilizationId, "My civilization");
 UiKit.Rules.Opened += screen => { /* the Rules screen was shown */ };
 ```
 
-The game fills the civilization drop-down of the Rules screen from its `Civilization` enum and looks tech trees up in its own list (it throws for an unknown civilization).
-`AddCivilization` appends your entry to the drop-down, so picking it shows that civilization's tree on the Technologies tab, and returns your tree whenever the game asks
-for the tree of that number (Rules screen and match). Your mod still has to provide the civilization's own data (skins, colours, the `TechTree` asset) - see `docs/NOTES.md`.
+The game fills the drop-down from its `Civilization` enum when the screen wakes up; `AddCivilizationEntry` appends an entry to it (a postfix on `Rules.Awake`/`OnEnable`).
+That is all UiKit does: registering a civilization (its id, tech tree, skins) is game logic and lives in ModCore; the ModBridge plugin adds the drop-down entries for the civilizations ModCore knows.
 
 ## Scoreboard
 
@@ -131,6 +154,15 @@ UiKit.Settings.Add(SettingsTab.Game, "My Mod", s => {
 The callback runs each time the game rebuilds that tab (a postfix on `SettingSetInterface.GenerateElements`), so no scanning is needed. Toggle and
 stepper rows refresh while the screen is open. Tabs: `Video`, `Audio`, `Input`, `Game` and `Lobby` (the settings box of the match-start screen).
 
+Rows can be disabled or hidden while the screen is open (both callbacks are re-read four times a second):
+
+```csharp
+var opts = new SettingsRowOptions { Enabled = () => isHost, Visible = () => unlocked };
+s.Toggle("Meteors", () => on, v => on = v, opts);
+s.Stepper("Speed", () => speed.ToString(), d => speed += d, opts);
+s.Info(() => warningTextOrEmpty);    // live paragraph, hidden while empty
+```
+
 ```csharp
 UiKit.Settings.Opened += screen => Log("Settings screen shown");
 // hidden unlock: 5 quick clicks in the bottom-left corner of the Settings screen
@@ -150,3 +182,27 @@ UiKit.Settings.AddHotspot("mymod.unlock", SettingsCorner.BottomLeft, 5, () => Un
 
 Look in `BepInEx/LogOutput.log` for lines from UiKit. "template was not found" errors mean the game screen that holds the template was not loaded yet when the
 widget was created: create windows after the game's UI is up (for example from a button press). Report issues with the log attached.
+
+## Project layout
+
+| Path | What is in it |
+|---|---|
+| `Plugin.cs`, `Core.cs`, `UiKit.cs` | Entry point, one-time installation, the public facade (`UiKit.Window`, `.TopBar`, `.Settings`, `.Rules`, `.Scoreboard`). |
+| `Window.cs`, `UiFactory.cs`, `UiRoot.cs`, `Handles.cs`, `ContainerHandle.cs`, `Widgets/` | The window system: one shared canvas, layout containers and the handles you get back (label, button, toggle, image, slider, dropdown, scroll view). |
+| `Native/` | Everything that clones the game's own UI: buttons, toggles, text, frames, icon sprites, templates, the per-frame runner, logging. |
+| `Assets.cs` | Asset cache: game sprites by name, textures, `SpriteNames(filter)`, the sprite name dump. |
+| `TopBar/` | The top-right button bar. |
+| `Settings/` | Rows in the game's Settings screen and the lobby settings box (`SettingsSection` is the API, `SettingsBuilder` builds the rows, `SettingsLive` refreshes them, `SettingsHotspots` the hidden click spots). |
+| `Rules/` | Appending entries to the Rules screen's civilization drop-down. |
+| `Scoreboard/` | Extra scoreboard columns. |
+| `Lobby/` | Comment-only stubs; the lobby moved to ModCore (delete this folder in your checkout). |
+| `docs/NOTES.md` | Implementation notes (why things are done the way they are). Read before touching `Native/`. |
+| `docs/EXAMPLE_MOD.md` | A complete minimal mod. |
+
+## Contributing
+
+- UiKit is **only the interface**. No lobby, Steam, rules or civilization logic here; that is ModCore. Code that needs both goes into ModBridge.
+- Every widget is a clone of the game's own, built under an inactive parent; follow `docs/NOTES.md` ("How it stays native") for new ones.
+- Add public overloads instead of optional parameters to existing methods (compiled mods call the old signature).
+- Wrap patches and per-frame code in `try/catch` and log with `UiLog.Once(key, message)`; a per-frame error must never print every frame.
+- After a change, test with the demo (`[Demo] Enabled = true`) and in the lobby, the Settings screen and a running match.

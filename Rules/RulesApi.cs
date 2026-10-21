@@ -1,91 +1,48 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using GameTechTree = DiceKingdoms.Game.TechTree;
 
 namespace DiceModders.UiKit;
 
-/// <summary>A civilization added to the game's Rules screen. <see cref="Remove"/> takes it out again (it disappears the next time the screen is built).</summary>
-public sealed class RulesCivilization {
-	internal string Key;
-	internal RulesCivilization(int id, string name, Func<GameTechTree> techTree, int skinsLike) { Id = id; Name = name; TechTree = techTree; SkinsLike = skinsLike; }
-	/// <summary>The value used as <c>Civilization</c> (the game's enum has 0..4; pick an unused number).</summary>
-	public int Id { get; }
-	public string Name { get; }
-	internal Func<GameTechTree> TechTree { get; }
-	/// <summary>The built-in civilization whose biome and visuals this one borrows (the game only knows how to skin 0..4).</summary>
-	public int SkinsLike { get; }
+/// <summary>An entry added to the civilization drop-down of the Rules screen. <see cref="Remove"/> takes it out again (it disappears the next time the screen is built).</summary>
+public sealed class RulesCivilizationEntry {
+	internal RulesCivilizationEntry(int civilizationId, string text) { CivilizationId = civilizationId; Text = text; }
+	/// <summary>The value the game receives as <c>Civilization</c> when the entry is picked.</summary>
+	public int CivilizationId { get; }
+	/// <summary>The text shown in the drop-down.</summary>
+	public string Text { get; }
 	public void Remove() => RulesRegistry.Remove(this);
 }
 
 internal static class RulesRegistry {
-	private static readonly List<RulesCivilization> Items = new();
+	private static readonly List<RulesCivilizationEntry> Items = new();
 
-	public static IReadOnlyList<RulesCivilization> All => Items;
+	public static IReadOnlyList<RulesCivilizationEntry> All => Items;
 
-	/// <summary>Stable id from a key: the same key gives the same id on every machine (needed for multiplayer); a taken id moves to the next free one.</summary>
-	public static int AllocateId(string key) {
-		uint h = 2166136261;
-		foreach (char ch in key) { h ^= ch; h *= 16777619; }
-		int id = 1000 + (int)(h % 1_000_000_000u);
-		while (Items.Exists(c => c.Id == id && c.Key != key)) id++;
-		return id;
+	public static RulesCivilizationEntry Add(int civilizationId, string text) {
+		Items.RemoveAll(e => e.CivilizationId == civilizationId);   // the same number again replaces the entry
+		var entry = new RulesCivilizationEntry(civilizationId, text);
+		Items.Add(entry);
+		return entry;
 	}
 
-	public static RulesCivilization Add(int id, string name, Func<GameTechTree> techTree, int skinsLike) {
-		var clash = Items.Find(c => c.Id == id);
-		if (clash != null && clash.Name != name)
-			UiLog.Warn($"Rules: civilization id {id} is already used by '{clash.Name}' - '{name}' replaces it.");
-		Items.RemoveAll(c => c.Id == id);   // registering the same id again replaces it
-		var civ = new RulesCivilization(id, name, techTree, skinsLike);
-		Items.Add(civ);
-		return civ;
-	}
-
-	public static void Remove(RulesCivilization civ) => Items.Remove(civ);
-
-	public static bool TryGetSkinsLike(int id, out int like) {
-		foreach (var c in Items) if (c.Id == id) { like = c.SkinsLike; return true; }
-		like = 0;
-		return false;
-	}
-
-	public static bool TryGetTree(int id, out GameTechTree tree) {
-		tree = null;
-		foreach (var c in Items) {
-			if (c.Id != id || c.TechTree == null) continue;
-			try { tree = c.TechTree(); } catch (Exception e) { UiLog.Error($"tech tree provider of '{c.Name}': {e}"); }
-			if (tree != null) return true;
-		}
-		return false;
-	}
+	public static void Remove(RulesCivilizationEntry entry) => Items.Remove(entry);
 }
 
 public static partial class UiKit {
 	/// <summary>Extension points of the game's Rules screen.</summary>
 	public static class Rules {
 		/// <summary>
-		/// Adds an entry to the civilization drop-down of the Rules screen. Choosing it selects that civilization there, so the Technologies tab shows its tech tree.
-		/// UiKit picks the civilization number so mods never collide: the key (e.g. "authorname.civname") becomes a fixed id (1000 and up), the same on every
-		/// machine, so multiplayer and saves agree. Read it back from <see cref="RulesCivilization.Id"/> to tag your own data.
+		/// Adds an entry to the civilization drop-down of the Rules screen. Choosing it makes the screen select that civilization number. This is only the
+		/// drop-down entry: whatever the game needs to know about a civilization beyond the five it ships with (its tech tree, its skins) is not UiKit's
+		/// business - a mod library that registers civilizations (ModCore) provides it, and the ModBridge plugin connects the two.
 		/// </summary>
-		/// <param name="key">Unique, stable name of the civilization, e.g. "authorname.civname".</param>
-		/// <param name="name">Text shown in the drop-down.</param>
-		/// <param name="techTree">
-		/// Returns the <c>TechTree</c> of that civilization. The game looks trees up in its own list (and throws for an unknown civilization), so this is used
-		/// whenever the game asks for the tree - on the Rules screen and in the match. May be null if the mod adds the tree to the game's list itself.
-		/// </param>
-		/// <param name="skinsLike">
-		/// The game sets a player's biome from the civilization with a switch over 0..4 and throws for anything else. The biome and visuals of this built-in
-		/// civilization (0 Europe, 1 Middle East, 2 Viking, 3 Ancient, 4 Maya) are used instead; the civilization itself keeps its own id.
-		/// </param>
-		public static RulesCivilization AddCivilization(string key, string name, Func<GameTechTree> techTree = null, int skinsLike = 0) {
+		/// <param name="civilizationId">The number the game receives as <c>Civilization</c> (the game's own enum has 0..4).</param>
+		/// <param name="text">Text shown in the drop-down.</param>
+		public static RulesCivilizationEntry AddCivilizationEntry(int civilizationId, string text) {
 			Core.Ensure();
-			if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("key is required", nameof(key));
-			if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("name is required", nameof(name));
-			var civ = RulesRegistry.Add(RulesRegistry.AllocateId(key), name, techTree, skinsLike);
-			civ.Key = key;
-			return civ;
+			if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("text is required", nameof(text));
+			return RulesRegistry.Add(civilizationId, text);
 		}
 
 		/// <summary>Raised each time the Rules screen is shown. The argument is the screen's root RectTransform.</summary>

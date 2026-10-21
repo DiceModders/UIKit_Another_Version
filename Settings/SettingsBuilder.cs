@@ -58,18 +58,27 @@ internal static class SettingsBuilder {
 	}
 	private static bool _described;
 
-	public static void AddHeader(GameSetInterface set, string name, string text) {
+	public static GameObject AddHeader(GameSetInterface set, string name, string text) {
 		var prefab = set.headerPrefab;
-		if (prefab == null) { UiLog.Once("settings:header", "settings: headerPrefab missing"); return; }
+		if (prefab == null) { UiLog.Once("settings:header", "settings: headerPrefab missing"); return null; }
 		var header = UnityEngine.Object.Instantiate(prefab, set.holder);
 		header.gameObject.name = name;
 		SetLabel(header.visual, text);
+		return header.gameObject;
 	}
 
 	/// <summary>A wrapped paragraph in the content column of a normal row (empty label), so it lines up with the game's own controls.</summary>
-	public static void AddInfo(GameSetInterface set, string name, string text) {
+	public static GameObject AddInfo(GameSetInterface set, string name, string text) => AddInfo(set, name, text, null);
+
+	/// <summary>
+	/// Like <see cref="AddInfo(GameSetInterface,string,string)"/>, but the text is re-read while the screen is open (four times a second); the row is hidden while
+	/// the text is empty and grows or shrinks with it.
+	/// </summary>
+	public static GameObject AddLiveInfo(GameSetInterface set, string name, Func<string> text) => AddInfo(set, name, SafeText(text), text);
+
+	private static GameObject AddInfo(GameSetInterface set, string name, string text, Func<string> live) {
 		var entry = NewEntry(set, name, "");
-		if (entry == null) return;
+		if (entry == null) return null;
 		var holder = entry.contentHolder;
 		var label = NativeText.Create(holder, name + " Text", text, 16f, TextAlignmentOptions.TopLeft);
 		label.enableWordWrapping = true;
@@ -77,26 +86,51 @@ internal static class SettingsBuilder {
 		rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
 		rt.offsetMin = new Vector2(ContentLeft, 0f); rt.offsetMax = new Vector2(-ScrollbarReserve, 0f);   // keep clear of the scrollbar
 
-		float width = ColumnWidth(holder) - ContentLeft;   // ColumnWidth already excludes the scrollbar
-		float height = label.GetPreferredValues(text ?? "", width, 0f).y + 8f;
 		var le = entry.GetComponent<LayoutElement>() ?? entry.gameObject.AddComponent<LayoutElement>();
-		le.minHeight = Mathf.Max(le.minHeight, height);
-		le.preferredHeight = Mathf.Max(le.preferredHeight, height);
+		void Fit(string value) {
+			float width = ColumnWidth(holder) - ContentLeft;   // ColumnWidth already excludes the scrollbar
+			float height = label.GetPreferredValues(value ?? "", width, 0f).y + 8f;
+			le.minHeight = height;
+			le.preferredHeight = height;
+		}
+		float first = label.GetPreferredValues(text ?? "", ColumnWidth(holder) - ContentLeft, 0f).y + 8f;
+		le.minHeight = Mathf.Max(le.minHeight, first);
+		le.preferredHeight = Mathf.Max(le.preferredHeight, first);
+		if (live != null) {
+			entry.gameObject.SetActive(!string.IsNullOrEmpty(text));
+			string shown = text;
+			SettingsLive.Add(entry, () => {
+				string now = SafeText(live);
+				if (now == shown) return;
+				shown = now;
+				label.text = now;
+				Fit(now);
+				entry.gameObject.SetActive(!string.IsNullOrEmpty(now));
+				Rebuild(set);
+			});
+		}
 		Rebuild(set);
+		return entry.gameObject;
 	}
 
-	public static void AddToggle(GameSetInterface set, string name, string label, Func<bool> get, Action<bool> setValue) {
+	/// <param name="enabled">When given, the checkbox is only clickable while it returns true (re-read four times a second).</param>
+	public static GameObject AddToggle(GameSetInterface set, string name, string label, Func<bool> get, Action<bool> setValue, Func<bool> enabled = null) {
 		var entry = NewEntry(set, name, label);
-		if (entry == null) return;
+		if (entry == null) return null;
 		var holder = entry.contentHolder;
 		EnsureRow(holder);   // same ContentLeft inset as buttons and steppers, so the checkbox lines up with the game's own controls
 		var toggle = NativeToggle.Create(NativeTemplates.BoolSetting(), holder, SafeGet(get), v => {
 			try { setValue?.Invoke(v); }
 			catch (Exception e) { UiLog.Error($"settings toggle '{label}': {e}"); }
 		});
-		if (toggle == null) { UiLog.Once("settings:toggle", "settings: no native checkbox template found"); return; }
-		SettingsLive.Add(entry, () => toggle.SetSilently(SafeGet(get)));
+		if (toggle == null) { UiLog.Once("settings:toggle", "settings: no native checkbox template found"); return entry.gameObject; }
+		if (enabled != null) toggle.SetInteractable(SafeGet(enabled));
+		SettingsLive.Add(entry, () => {
+			toggle.SetSilently(SafeGet(get));
+			if (enabled != null) toggle.SetInteractable(SafeGet(enabled));
+		});
 		Rebuild(set);
+		return entry.gameObject;
 	}
 
 	public static void AddButtons(GameSetInterface set, string name, string label, (string text, Action onClick)[] buttons) {
@@ -121,22 +155,29 @@ internal static class SettingsBuilder {
 		Rebuild(set);
 	}
 
-	public static void AddStepper(GameSetInterface set, string name, string label, Func<string> valueText, Action<int> step) {
+	/// <param name="enabled">When given, the "-" and "+" buttons are only clickable while it returns true (re-read four times a second).</param>
+	public static GameObject AddStepper(GameSetInterface set, string name, string label, Func<string> valueText, Action<int> step, Func<bool> enabled = null) {
 		var entry = NewEntry(set, name, label);
-		if (entry == null) return;
+		if (entry == null) return null;
 		var holder = entry.contentHolder;
 		EnsureRow(holder);
 
 		TMP_Text value = null;   // shown between the buttons; both buttons refresh it at once instead of waiting for the live refresh
-		NativeButton.CreateLabel(holder, name + " Minus", "-", 20f, () => { Step(step, -1); if (value != null) value.text = SafeText(valueText); })?.SetSize(StepButtonWidth, NativeButton.Height);
+		var minus = NativeButton.CreateLabel(holder, name + " Minus", "-", 20f, () => { Step(step, -1); if (value != null) value.text = SafeText(valueText); });
+		minus?.SetSize(StepButtonWidth, NativeButton.Height);
 
 		value = NativeText.Create(holder, name + " Value", SafeText(valueText), 16f, TextAlignmentOptions.Center);
 		var le = value.gameObject.AddComponent<LayoutElement>();
 		le.preferredWidth = ValueWidth; le.minWidth = ValueWidth; le.preferredHeight = NativeButton.Height;
-		SettingsLive.Add(entry, () => value.text = SafeText(valueText));
-
-		NativeButton.CreateLabel(holder, name + " Plus", "+", 20f, () => { Step(step, +1); value.text = SafeText(valueText); })?.SetSize(StepButtonWidth, NativeButton.Height);
+		var plus = NativeButton.CreateLabel(holder, name + " Plus", "+", 20f, () => { Step(step, +1); value.text = SafeText(valueText); });
+		plus?.SetSize(StepButtonWidth, NativeButton.Height);
+		if (enabled != null) { bool on = SafeGet(enabled); minus?.SetInteractable(on); plus?.SetInteractable(on); }
+		SettingsLive.Add(entry, () => {
+			value.text = SafeText(valueText);
+			if (enabled != null) { bool on = SafeGet(enabled); minus?.SetInteractable(on); plus?.SetInteractable(on); }
+		});
 		Rebuild(set);
+		return entry.gameObject;
 	}
 
 	private const float RowSpacing = 6f;

@@ -11,6 +11,21 @@ public sealed class ContainerHandle : ElementHandle<ContainerHandle> {
 	/// <summary>Set for a window's title bar: buttons there are as wide as their text instead of sharing the row.</summary>
 	internal bool TextSizedButtons;
 
+	/// <summary>
+	/// Removes every child of this container (labels, buttons, rows ...), so a list that changes can be rebuilt instead of pre-building spare rows. Handles to the
+	/// removed elements stop working. The container itself, its layout and its size settings stay.
+	/// </summary>
+	public ContainerHandle Clear() {
+		for (int i = Root.childCount - 1; i >= 0; i--) {
+			var child = Root.GetChild(i);
+			if (child == null) continue;
+			child.gameObject.SetActive(false);   // gone from the layout at once; Destroy only takes effect at the end of the frame
+			UnityEngine.Object.Destroy(child.gameObject);
+		}
+		LayoutRebuilder.MarkLayoutForRebuild(Root);
+		return this;
+	}
+
 	public HorizontalOrVerticalLayoutGroup HVLayout => Root.GetComponent<HorizontalOrVerticalLayoutGroup>();
 	public GridLayoutGroup GridLayout               => Root.GetComponent<GridLayoutGroup>();
 

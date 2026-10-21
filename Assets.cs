@@ -37,6 +37,23 @@ public static class Assets {
 
 		scanned = true;
 		nextRescan = Time.realtimeSinceStartup + 3f;
+		DumpSpriteNames();
+	}
+
+	private static bool _dumped;
+
+	/// <summary>With <c>[Debug] DumpSpriteNames</c>: writes every sprite name to BepInEx/uikit-sprites.txt (once per run, when the list is largest).</summary>
+	private static void DumpSpriteNames() {
+		try {
+			if (_dumped || Plugin.DumpSpriteNames == null || !Plugin.DumpSpriteNames.Value || sprites.Count < 100) return;
+			_dumped = true;
+			var names = new List<string>(sprites.Keys);
+			names.Sort(System.StringComparer.OrdinalIgnoreCase);
+			string path = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "uikit-sprites.txt");
+			System.IO.File.WriteAllLines(path, names);
+			UiLog.Info($"wrote {names.Count} sprite names to {path}");
+		}
+		catch (System.Exception e) { UiLog.Warn("could not write the sprite name list: " + e.Message); }
 	}
 
 	private static void EnsureScanned() { if (!scanned) Scan(); }

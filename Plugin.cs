@@ -189,15 +189,8 @@ public static class InterfaceAwakePatch {
 		});
 
 		if (Plugin.DemoRulesScoreboard.Value) {
-			// A scoreboard column that shows the kingdom's name, and a fake civilization (99) in the Rules drop-down that reuses the Europe tech tree.
+			// A scoreboard column that shows the kingdom's name.
 			UiKit.Scoreboard.AddColumn("uikit.demo", island => island != null ? island.name : "-", "UiKit demo column");
-			UiKit.Rules.AddCivilization("uikit.demo.civ", "UiKit demo civ", skinsLike: 0, techTree: () => {
-				foreach (var o in Resources.FindObjectsOfTypeAll(Il2CppType.Of<DiceKingdoms.Game.Technologies>())) {
-					var t = o?.TryCast<DiceKingdoms.Game.Technologies>();
-					if (t != null) return t.TechTree(DiceKingdoms.Interface.Civilization.EUROPE);
-				}
-				return null;
-			});
 		}
 	}
 }
@@ -210,15 +203,17 @@ public class Plugin : BasePlugin {
     internal static BepInEx.Configuration.ConfigEntry<int> DemoExtraRows;
     internal static BepInEx.Configuration.ConfigEntry<bool> DumpWindows;
     internal static BepInEx.Configuration.ConfigEntry<bool> ShowInvisible;
+    internal static BepInEx.Configuration.ConfigEntry<bool> DumpSpriteNames;
     internal static BepInEx.Configuration.ConfigEntry<bool> DemoRulesScoreboard;
 
     public override void Load() {
         Log = base.Log;
 		DemoEnabled = Config.Bind("Demo", "Enabled", false, "Show the demo windows, top bar button and settings rows (for testing the library; off by default).");
 		DemoExtraRows = Config.Bind("Demo", "ExtraRows", 0, "Adds this many extra toggle rows to the demo settings block (to test scrolling and the Close button shift).");
-		DemoRulesScoreboard = Config.Bind("Demo", "RulesAndScoreboard", false, "With the demo on: adds a scoreboard column and a fake civilization to the Rules drop-down (the fake civilization may break skins/colours when selected).");
+		DemoRulesScoreboard = Config.Bind("Demo", "Scoreboard", false, "With the demo on: adds a scoreboard column.");
 		DumpWindows = Config.Bind("Debug", "DumpWindows", false, "Writes the object tree of the game's own windows to the log (for developers).");
 		ShowInvisible = Config.Bind("Debug", "ShowInvisible", false, "Draws the invisible things UiKit adds (hidden click spots in red, the scroll catcher in green) so you can see where they are. Takes effect the next time a screen is opened.");
+		DumpSpriteNames = Config.Bind("Debug", "DumpSpriteNames", false, "Writes the names of all of the game's sprites (the names the icon parameters take) to BepInEx/uikit-sprites.txt the first time they are read.");
 		UiKit.Init();
 		if (DemoEnabled.Value) InterfaceAwakePatch.RegisterDemoExtras();
 		var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);

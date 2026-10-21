@@ -65,6 +65,8 @@ Notes:
 - Call UiKit from `Load()` or later; registration before the game's screens exist is fine, buttons and rows appear when the screens do.
 - Window calls (`UiKit.Window`) need the game's UI to exist: call them from a click handler or after the main menu has loaded, not from `Load()`.
 - Prefix your top bar ids with your mod name; ids must be unique.
+- Inside a `DiceModders.*` namespace the name `UiKit` means the namespace: add `using Ui = DiceModders.UiKit.UiKit;` and write `Ui.Window(...)`.
+- Lobby rules and civilizations are in ModCore; the longer tutorial using all three libraries is ModBridge's `docs/FIRST_MOD.md`.
 
 ## Thunderstore `manifest.json` (excerpt)
 

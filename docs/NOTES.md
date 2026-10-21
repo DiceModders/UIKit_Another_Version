@@ -12,8 +12,7 @@
   The wrapper keeps the boxed values in `values` and its TMP_Dropdown calls `onSelect(values[index])`; `Rules.OnSelectCivilization(object)` unboxes a `Civilization`
   and sets `PlayerSkins.Civilization`, then the tech tree tab is rebuilt with `Technologies.TechTree(civilization)`.
   UiKit therefore appends an option to the TMP_Dropdown and a boxed enum value (`Enum.ToObject`) to `values` - a postfix on `Rules.Awake`/`OnEnable`, nothing is polled.
-- `Technologies.TechTree(Civilization)` is `First(t => t.civilization == civ)`; a prefix returns the registered provider's tree for registered ids.
-- A modded civilization also needs whatever else the game looks up per civilization (e.g. `PlayerSkins`/`SkinRegistry` entries); that data belongs to the mod.
+- Only the drop-down entry is UiKit's. What the game needs to accept a civilization beyond 0..4 (tech tree lookup, skins) is game logic and lives in ModCore.
 - `ScoreboardRow.Start` creates the row's 10 stat cells (ping, 6 resources, population, technologies) by cloning `stats[0]`. A postfix clones the last cell once per
   registered column, destroys the clone's `ScoreboardStat` (so the game does not drive it) and writes the text from the column's function four times a second.
   The first cell built logs its structure once (`scoreboard stat cell structure ...`).

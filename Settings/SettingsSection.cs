@@ -51,4 +51,52 @@ public sealed class SettingsSection {
 		SettingsBuilder.AddInfo(_set, NextName("Info"), text);
 		return this;
 	}
+
+	// ---- rows that can be disabled or hidden while the screen is open
+
+	/// <summary>A sub header that is shown only while <see cref="SettingsRowOptions.Visible"/> returns true.</summary>
+	public SettingsSection Header(string text, SettingsRowOptions options) {
+		Bind(SettingsBuilder.AddHeader(_set, NextName("Header"), text), options);
+		return this;
+	}
+
+	/// <summary>A checkbox row that can be disabled (greyed out and not clickable) or hidden by <paramref name="options"/>; both are re-read four times a second.</summary>
+	public SettingsSection Toggle(string label, Func<bool> get, Action<bool> set, SettingsRowOptions options) {
+		Bind(SettingsBuilder.AddToggle(_set, NextName("Toggle"), label, get, set, options?.Enabled), options);
+		return this;
+	}
+
+	/// <summary>A "-" / value / "+" row that can be disabled or hidden by <paramref name="options"/>.</summary>
+	public SettingsSection Stepper(string label, Func<string> valueText, Action<int> step, SettingsRowOptions options) {
+		Bind(SettingsBuilder.AddStepper(_set, NextName("Stepper"), label, valueText, step, options?.Enabled), options);
+		return this;
+	}
+
+	/// <summary>A wrapped paragraph that can be hidden by <paramref name="options"/> (<see cref="SettingsRowOptions.Enabled"/> does not apply to text).</summary>
+	public SettingsSection Info(string text, SettingsRowOptions options) {
+		Bind(SettingsBuilder.AddInfo(_set, NextName("Info"), text), options);
+		return this;
+	}
+
+	/// <summary>A wrapped paragraph whose text is re-read four times a second; the row is hidden while the text is empty and grows or shrinks with it.</summary>
+	public SettingsSection Info(Func<string> text) {
+		SettingsBuilder.AddLiveInfo(_set, NextName("Info"), text);
+		return this;
+	}
+
+	private static void Bind(GameObject row, SettingsRowOptions options) {
+		if (row == null || options?.Visible == null) return;
+		var visible = options.Visible;
+		bool Now() { try { return visible(); } catch (Exception e) { UiLog.Once("settings:visible", "settings row visible(): " + e.Message); return true; } }
+		row.SetActive(Now());
+		SettingsLive.Add(row, () => { bool v = Now(); if (row.activeSelf != v) row.SetActive(v); });
+	}
+}
+
+/// <summary>Options of a settings row: both callbacks are re-read four times a second while the screen is open.</summary>
+public sealed class SettingsRowOptions {
+	/// <summary>Toggle and stepper rows: false greys the control out and makes it unclickable.</summary>
+	public Func<bool> Enabled { get; set; }
+	/// <summary>False hides the whole row (the rows below move up).</summary>
+	public Func<bool> Visible { get; set; }
 }
