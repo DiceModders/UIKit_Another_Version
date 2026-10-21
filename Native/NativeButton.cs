@@ -138,6 +138,17 @@ internal sealed class NativeButton {
 	public static NativeButton CreateClose(Transform parent, string name, Action click) {
 		var template = NativeTemplates.CloseIconButton();
 		if (template == null) return null;
+
+		// Preferred: the game's exit icon on the same label-button clone as the title bar buttons, so size, outline, shadow, hover and pressed art match.
+		// (Cloning the small icon button and stretching it to 31.75 left its shadow at the donor's size, which overlapped the row below.)
+		var donorIcon = template.GetComponent<GameButtonIcon>();
+		Sprite exit = donorIcon != null ? donorIcon.Icon : null;
+		if (exit == null) { var donorImage = FindIconImageIn(template); if (donorImage != null) exit = donorImage.sprite; }
+		if (exit != null) {
+			var iconButton = CreateIcon(parent, name, exit, click, null);
+			if (iconButton != null) return iconButton;
+		}
+
 		var nb = Clone(template, parent, name, null);
 		if (nb == null) return null;
 		nb.SetClick(click);
