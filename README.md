@@ -21,11 +21,12 @@ Copy `DiceModders.UiKit.dll` into `Dice-Kingdoms\BepInEx\plugins`. Mods that use
 Requirements: .NET SDK 6 or newer, the game installed with BepInEx 6 (IL2CPP) and started once (this generates `BepInEx\interop`).
 
 ```powershell
+$game = "<your Dice-Kingdoms folder>"   # the folder that contains BepInEx, e.g. ...\steamapps\common\Dice-Kingdoms (Steam: Properties > Installed Files > Browse)
 git clone https://github.com/DiceModders/UIKit_Another_Version
 cd UIKit_Another_Version
-.\scripts\link-interop.ps1 "E:\SteamLibrary\steamapps\common\Dice-Kingdoms"    # creates .\interop (git-ignored)
+.\scripts\link-interop.ps1 $game    # creates .\interop (git-ignored)
 dotnet build -c Release --no-incremental
-Copy-Item bin\Release\net6.0\DiceModders.UiKit.dll "E:\SteamLibrary\steamapps\common\Dice-Kingdoms\BepInEx\plugins" -Force
+Copy-Item bin\Release\net6.0\DiceModders.UiKit.dll "$game\BepInEx\plugins" -Force
 ```
 
 Demo content (windows, a top bar button, a "UiKit demo" settings block) is controlled by `BepInEx/config/DiceModders.UiKit.cfg` -> `[Demo] Enabled` (off by default).
