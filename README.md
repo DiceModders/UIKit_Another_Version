@@ -4,7 +4,7 @@ A small library for BepInEx 6 (IL2CPP) mods. Everything it shows is a **clone of
 sounds and cursor changes, so mod UI looks and behaves like the game. Several mods can use it side by side.
 
 UiKit is only the **interface**: one entry point (one canvas, one asset cache, one API) for adding to the game's screens. Game and networking logic (the Steam lobby, lobby rules,
-civilizations) is [ModCore](https://github.com/superartyom/DiceKingdoms-ModCore); the small [ModBridge](https://github.com/superartyom/DiceKingdoms-ModBridge) plugin shows ModCore's data in UiKit's screens. The libraries do not depend on each other.
+civilizations) is [ModCore](https://github.com/DiceModders/DiceKingdoms-ModCore); the small [ModBridge](https://github.com/DiceModders/DiceKingdoms-ModBridge) plugin shows ModCore's data in UiKit's screens. The libraries do not depend on each other.
 
 | You want | Use |
 |---|---|
@@ -21,8 +21,8 @@ Copy `DiceModders.UiKit.dll` into `Dice-Kingdoms\BepInEx\plugins`. Mods that use
 Requirements: .NET SDK 6 or newer, the game installed with BepInEx 6 (IL2CPP) and started once (this generates `BepInEx\interop`).
 
 ```powershell
-git clone https://github.com/superartyom/DiceKingdoms-UiKit
-cd DiceKingdoms-UiKit
+git clone https://github.com/DiceModders/UIKit_Another_Version
+cd UIKit_Another_Version
 .\scripts\link-interop.ps1 "E:\SteamLibrary\steamapps\common\Dice-Kingdoms"    # creates .\interop (git-ignored)
 dotnet build -c Release --no-incremental
 Copy-Item bin\Release\net6.0\DiceModders.UiKit.dll "E:\SteamLibrary\steamapps\common\Dice-Kingdoms\BepInEx\plugins" -Force
