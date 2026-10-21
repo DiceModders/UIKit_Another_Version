@@ -38,6 +38,7 @@ internal sealed class UiKitRunner : MonoBehaviour {
 		if (now < _next) return;
 		_next = now + 0.25f;
 		try {
+			WindowRegistry.Tick();
 			UiKit.TopBar.Tick(now);
 			SettingsLive.Tick(now);
 			SettingsCloseShift.Tick();

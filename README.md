@@ -181,6 +181,20 @@ UiKit.Settings.Opened += screen => Log("Settings screen shown");
 UiKit.Settings.AddHotspot("mymod.unlock", SettingsCorner.BottomLeft, 5, () => Unlock());
 ```
 
+## Screen sizes and aspect ratios
+
+The game's main canvas scales with the screen (reference 1920x1080, match height): it is always **1080 units tall** and its width follows the aspect ratio
+(16:10 = 1728, 4:3 = 1440, 5:4 = 1350, 21:9 = 2520, 32:9 = 3840 units wide). Some canvases (for example the one over the dice) match the width instead: **1920 wide**, height follows the ratio
+(16:10 = 1200, 4:3 = 1440, 21:9 = 823, 32:9 = 540). All UiKit sizes are canvas units, so they scale with the screen like the game's own UI.
+
+- **Windows** are placed by their top-left corner. Whenever the canvas size changes, UiKit shrinks windows that are bigger than the canvas and moves every window fully inside it,
+  so a window never ends up off-screen after a resolution or ratio change. Dragging is clamped the same way.
+- **Top bar buttons** live inside the game's own bar and follow it.
+- **Settings rows** live inside the game's own layout and follow it.
+- The log has a `canvas '...'` line (size in units, ratio, scale, scaler mode) every time the canvas size changes - include it when reporting a layout problem.
+
+Tested at 16:9 (1920x1080 and a 1176x664 window). Other ratios follow from the game's scaler settings and are not tested.
+
 ## How it stays native
 
 - Buttons: clone of the Rules button (icons) and `Settings/Close Button` (text), under an inactive parent so `Awake` only runs when configured. Clicks go

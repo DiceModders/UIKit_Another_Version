@@ -456,6 +456,7 @@ public sealed class WindowHandle {
 		if (_state == state) return this;
 		if (_state == WindowState.Normal) TakeSnapshot();
 		_state = state;
+		_fittedTo = default;   // the canvas may have changed while full screen
 		ApplyStateVisual();
 		return this;
 	}
@@ -465,6 +466,29 @@ public sealed class WindowHandle {
 		if (_state == WindowState.Fullscreen) Restore();
 		else Fullscreen();
 	}
+
+	private Vector2 _fittedTo;
+
+	/// <summary>
+	/// Keeps a normal (not full screen) window fully inside the canvas. The canvas is not always 16:9 (4:3, 16:10, 21:9, a resized window...), so a
+	/// position that was fine at the author's resolution can fall off the edge; the runner calls this whenever the canvas size changes.
+	/// </summary>
+	internal void FitToScreen(Vector2 canvasSize) {
+		if (!IsOpen || _state != WindowState.Normal) return;
+		if (canvasSize.x < 1f || canvasSize.y < 1f) return;
+		var rt = _view.Root;
+		var size = rt.sizeDelta;
+		size.x = Mathf.Min(size.x, canvasSize.x);
+		size.y = Mathf.Min(size.y, canvasSize.y);
+		var p = rt.anchoredPosition;
+		p.x = Mathf.Clamp(p.x, 0f, canvasSize.x - size.x);
+		p.y = Mathf.Clamp(p.y, -(canvasSize.y - size.y), 0f);
+		rt.sizeDelta = size;
+		rt.anchoredPosition = p;
+		_fittedTo = canvasSize;
+	}
+
+	internal bool IsFittedTo(Vector2 canvasSize) => _fittedTo == canvasSize;
 
 	private void ApplyLayout() {
 		if (_view == null) return;
@@ -517,6 +541,33 @@ internal static class WindowRegistry {
 	public static int Count => Windows.Count;
 	public static void Register(WindowHandle w)   { if (w != null && !Windows.Contains(w)) Windows.Add(w); }
 	public static void Unregister(WindowHandle w) { Windows.Remove(w); }
+
+	private static Vector2 _lastCanvas;
+
+	/// <summary>Re-fits the windows when the canvas size changed since the last call (resolution, aspect ratio or window resize).</summary>
+	public static void Tick() {
+		if (Windows.Count == 0) return;
+		var canvas = UiRoot.Root;
+		var rt = canvas != null ? canvas.GetComponent<RectTransform>() : null;
+		if (rt == null) return;
+		var size = rt.rect.size;
+		if (size != _lastCanvas) {
+			_lastCanvas = size;
+			LogCanvas(canvas, size);
+		}
+		for (int i = Windows.Count - 1; i >= 0; i--) {
+			var w = Windows[i];
+			if (!w.IsOpen) { Windows.RemoveAt(i); continue; }
+			if (!w.IsFittedTo(size)) w.FitToScreen(size);
+		}
+	}
+
+	private static void LogCanvas(Canvas canvas, Vector2 size) {
+		var scaler = canvas.GetComponent<CanvasScaler>();
+		string mode = scaler == null ? "no CanvasScaler" :
+			$"{scaler.uiScaleMode}, reference {scaler.referenceResolution.x:0}x{scaler.referenceResolution.y:0}, {scaler.screenMatchMode} {scaler.matchWidthOrHeight:0.##}";
+		UiLog.Info($"canvas '{canvas.name}': {size.x:0}x{size.y:0} units (ratio {size.x / size.y:0.00}), scale {canvas.scaleFactor:0.###}, screen {Screen.width}x{Screen.height}, {mode}");
+	}
 
 	public static void BringToFront(WindowHandle w) {
 		if (w?.Root == null) return;
