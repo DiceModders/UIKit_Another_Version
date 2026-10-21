@@ -30,24 +30,60 @@ internal static class SettingsHook {
 		try {
 			if (__instance == null || __instance.holder == null) return;
 			if (!TryGetTab(__instance, out var tab)) return;
+			EnsureHotspots(__instance);
 			var regs = SettingsRegistry.For(tab);
 			if (regs.Count == 0) { if (tab != SettingsTab.Lobby) SettingsCloseShift.Update(__instance, false); return; }
 
 			RemoveOld(__instance);
+			EnsureWheelTarget(__instance.holder);
+			SettingsViewport.SetWheelSpeed(__instance);
 			SettingsBuilder.MeasureContentLeft(__instance);
 			int n = 0;
 			foreach (var reg in regs) {
 				var section = new SettingsSection(__instance, (++n).ToString());
 				try {
-					section.Header(reg.Title);
+					if (!string.IsNullOrEmpty(reg.Title)) section.Header(reg.Title);   // a null title appends rows to the block above
 					reg.Build(section);
 				}
 				catch (Exception e) { UiLog.Error($"settings block '{reg.Title}' failed: {e}"); }
 			}
+			if (tab != SettingsTab.Lobby) SettingsBuilder.AddBottomSpacer(__instance, CloseButtonHeight(__instance));
 			UnityEngine.UI.LayoutRebuilder.MarkLayoutForRebuild(__instance.holder);
 			if (tab != SettingsTab.Lobby) SettingsCloseShift.Update(__instance, true);
 		}
 		catch (Exception e) { UiLog.Once("settings:hook", "settings hook: " + e); }
+	}
+
+	/// <summary>The hotspots live under the Settings screen. Built here as well as in <c>OnEnable</c>, because this hook is known to run whenever a tab is built.</summary>
+	private static void EnsureHotspots(GameSetInterface set) {
+		try {
+			var sets = set.GetComponentInParent<GameSetsInterface>(true);
+			var rect = sets != null ? sets.GetComponent<UnityEngine.RectTransform>() : null;
+			if (rect != null) SettingsHotspots.Ensure(rect, sets.closeButton != null ? sets.closeButton.transform : null);
+		}
+		catch (Exception e) { UiLog.Once("settings:hotspots", "settings hotspots: " + e); }
+	}
+
+	/// <summary>Height of the game's Close button plus a little air, measured at runtime.</summary>
+	private static float CloseButtonHeight(GameSetInterface set) {
+		try {
+			var sets = set.GetComponentInParent<GameSetsInterface>(true);
+			var rt = sets != null && sets.closeButton != null ? sets.closeButton.GetComponent<RectTransform>() : null;
+			if (rt != null && rt.rect.height > 4f) return rt.rect.height + 16f;
+		}
+		catch (Exception e) { UiLog.Once("closeheight", "settings: could not measure the Close button: " + e.Message); }
+		return 60f;
+	}
+
+	/// <summary>
+	/// Unity sends the mouse wheel to a ScrollRect only when the pointer is over a graphic that accepts raycasts, and the gaps between the rows have none,
+	/// so the wheel was dead there. One invisible raycast graphic on the scroll content makes the game's own ScrollRect take the wheel everywhere.
+	/// </summary>
+	private static void EnsureWheelTarget(UnityEngine.RectTransform holder) {
+		if (holder == null || holder.GetComponent<UnityEngine.UI.Graphic>() != null) return;
+		var image = holder.gameObject.AddComponent<UnityEngine.UI.Image>();
+		DebugView.Style(image, DebugView.Catcher);   // visible (green) with [Debug] ShowInvisible
+		UiLog.Once("wheeltarget", "settings: scroll content now accepts raycasts, so the game's own ScrollRect gets the mouse wheel");
 	}
 
 	private static void RemoveOld(GameSetInterface set) {
@@ -88,9 +124,10 @@ internal static class SettingsOpenedHook {
 	public static void Postfix(GameSetsInterface __instance) {
 		try {
 			if (__instance == null) return;
+			UiLog.Once("settings:onenable", "settings: screen shown (OnEnable hook runs)");
 			var rect = __instance.GetComponent<UnityEngine.RectTransform>();
 			if (rect == null) return;
-			SettingsHotspots.Ensure(rect);
+			SettingsHotspots.Ensure(rect, __instance.closeButton != null ? __instance.closeButton.transform : null);
 			UiKit.Settings.RaiseOpened(rect);
 		}
 		catch (Exception e) { UiLog.Once("settings:opened", "settings opened hook: " + e); }

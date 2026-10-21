@@ -42,6 +42,10 @@ internal sealed class NativeButton {
 	private Vector2 _iconBox;
 	private float _iconScale = 1f;
 	private const float IconFill = 0.82f;
+	private const float BarIconFill = 0.7f;
+	private const float BarIconClipTop = 0f;   // fraction of the icon cropped at the top as a last resort against atlas bleed; 0 = off (see ReduceAtlasBleed)   // the bar's own glyphs fill about half of their tile; full-tile art (a hammer) must not look bigger
+	private float _iconFill = IconFill;
+	private bool _clipIcon;   // bar icons: crop the outer few percent of the icon's quad (see ClipIcon)
 
 	private Image _dim;
 	private GameButton.State _state = GameButton.State.READY;
@@ -107,6 +111,8 @@ internal sealed class NativeButton {
 		if (template == null) return null;
 		var nb = Clone(template, parent, name, tooltip);
 		if (nb == null) return null;
+		nb._iconFill = BarIconFill;
+		nb._clipIcon = BarIconClipTop > 0f;
 		var templateRect = template.GetComponent<RectTransform>();
 		if (templateRect != null) nb._designSize = Mathf.Min(templateRect.rect.width, templateRect.rect.height);
 		var donorImage = FindIconImageIn(template);
@@ -114,7 +120,18 @@ internal sealed class NativeButton {
 		else DescribeIconTemplate(template);
 		nb.SetIcon(icon);
 		nb.SetClick(click);
+		DescribeButton(nb.Go, "top bar button");
 		return nb;
+	}
+
+	/// <summary>Logs every child image of a button once (name, rect, sprite, colour), to track down stray lines drawn by leftover template parts.</summary>
+	private static void DescribeButton(GameObject go, string what) {
+		var sb = new System.Text.StringBuilder(what + " '" + go.name + "' parts:");
+		foreach (var img in go.GetComponentsInChildren<Image>(true)) {
+			if (img == null) continue;
+			sb.Append($"\n   {img.name}: active={img.gameObject.activeSelf} enabled={img.enabled} rect={img.rectTransform.rect} anchors={img.rectTransform.anchorMin}-{img.rectTransform.anchorMax} type={img.type} sprite='{(img.sprite != null ? img.sprite.name : "-")}' color={img.color}");
+		}
+		UiLog.Once("describe:" + what, sb.ToString());
 	}
 
 	/// <summary>The small X button of the game's windows (About, Store ...), cloned with its own icon.</summary>
@@ -193,10 +210,27 @@ internal sealed class NativeButton {
 
 	public void SetIcon(Sprite sprite) {
 		if (sprite == null || Go == null) return;
+		ReduceAtlasBleed(sprite);
+		UiLog.Once("iconsprite:" + sprite.name, $"icon sprite '{sprite.name}': rect={sprite.rect} textureRect={sprite.textureRect} border={sprite.border} ppu={sprite.pixelsPerUnit} texture='{(sprite.texture != null ? sprite.texture.name : "-")}' {(sprite.texture != null ? sprite.texture.width + "x" + sprite.texture.height : "")}");
 		var icon = Go.GetComponent<GameButtonIcon>();
 		if (icon != null) icon.Icon = sprite;
 		else { var image = FindIconImage(); if (image != null) image.sprite = sprite; }
 		NormalizeIcon();
+	}
+
+	/// <summary>
+	/// The icon atlas has mip maps and only 32 px between its entries. A 512 px sprite drawn at ~20 units is sampled from a mip level so coarse that its
+	/// texels reach into the neighbouring entry, and the neighbour's art shows as a line at the sprite's edge. Biasing the atlas towards sharper mips
+	/// keeps the sampling inside the 32 px gap. Icons at their native size always use the sharpest mip, so nothing else changes.
+	/// </summary>
+	private static void ReduceAtlasBleed(Sprite sprite) {
+		try {
+			var texture = sprite.texture;
+			if (texture == null || texture.mipMapBias <= -2f) return;
+			texture.mipMapBias = -2f;
+			UiLog.Once("atlasbias", $"icon atlas '{texture.name}': mip bias set to -2 (mipmaps={texture.mipmapCount})");
+		}
+		catch (Exception e) { UiLog.Once("atlasbias:err", "could not adjust the icon atlas: " + e.Message); }
 	}
 
 	private Image FindIconImage() => FindIconImageIn(Go);
@@ -241,7 +275,36 @@ internal sealed class NativeButton {
 		rt.pivot = new Vector2(0.5f, 0.5f);
 		rt.anchoredPosition = Vector2.zero;
 		rt.localScale = Vector3.one;
-		rt.sizeDelta = _iconBox * (IconFill * _iconScale);
+		rt.sizeDelta = _iconBox * (_iconFill * _iconScale);
+		if (_clipIcon) ClipIcon(rt);
+	}
+
+	/// <summary>
+	/// The game's icon atlas has only 32 px of padding, and a 512 px sprite drawn at ~20 units is minified so far that the neighbouring atlas art (button
+	/// edges) bleeds into the outermost pixels of the sprite's quad: a thin coloured line at its edge. The icon is wrapped in a RectMask2D that is a few
+	/// percent smaller than the quad, so those outer pixels are simply never drawn. The art itself has a transparent margin and is not affected.
+	/// </summary>
+	private static void ClipIcon(RectTransform icon) {
+		var parent = icon.parent;
+		if (parent == null) return;
+		Transform clip = parent.name == "DM Icon Clip" ? parent : null;
+		if (clip == null) {
+			var made = UiFactory.NewRect("DM Icon Clip", parent);
+			made.anchorMin = made.anchorMax = new Vector2(0.5f, 0.5f);
+			made.pivot = new Vector2(0.5f, 0.5f);
+			made.anchoredPosition = Vector2.zero;
+			made.gameObject.AddComponent<RectMask2D>();
+			made.SetSiblingIndex(icon.GetSiblingIndex());
+			icon.SetParent(made, false);   // anchors, offset and size stay: the icon is still centred
+			clip = made;
+		}
+		// the bleed shows at the top edge: crop a thin slice there and almost nothing elsewhere (the art reaches close to the quad's edges)
+		float size = Mathf.Max(icon.sizeDelta.x, icon.sizeDelta.y);
+		float top = size * BarIconClipTop, side = size * 0.015f;
+		var clipRt = clip.GetComponent<RectTransform>();
+		clipRt.sizeDelta = icon.sizeDelta - new Vector2(2f * side, side + top);
+		clipRt.anchoredPosition = new Vector2(0f, (side - top) / 2f);   // its top edge moved down by 'top', its bottom edge up by 'side'
+		icon.anchoredPosition = new Vector2(0f, (top - side) / 2f);     // so the icon stays exactly where it was
 	}
 
 	/// <summary>Scales the icon with the button when the button is not the donor's size (e.g. 32 units inside a window).</summary>

@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using GameSetInterface = DiceKingdoms.Meta.SettingSetInterface;
 using GameSetsInterface = DiceKingdoms.Meta.SettingSetsInterface;
@@ -12,7 +11,6 @@ namespace DiceModders.UiKit;
 /// <list type="bullet">
 /// <item>the game's scrollbar appears at the right edge where the Close button sits, so the button is moved left by the scrollbar's width while a tab shows it
 /// (a child named "DM Shifted" remembers the shift; tabs without it are put back);</item>
-/// <item>if the mouse wheel does not scroll the tab natively (checked once, by watching the scrollbar value), the wheel drives the game's scrollbar.</item>
 /// </list>
 /// </summary>
 internal static class SettingsCloseShift {
@@ -26,10 +24,6 @@ internal static class SettingsCloseShift {
 	private static float _seen;
 	private static bool _described;
 
-	private static bool? _nativeScrolls;   // unknown until the first wheel turn
-	private static float _before;
-	private static float _pendingDelta;
-	private static int _wait;
 
 	/// <summary>Called by the settings hook after a tab was (re)built.</summary>
 	public static void Update(GameSetInterface set, bool hasModRows) {
@@ -55,6 +49,9 @@ internal static class SettingsCloseShift {
 
 			_bar = FindBar(sets);
 			if (!_described && Time.unscaledTime - _seen > 1.5f && _hasMods) { _described = true; Describe(sets); }
+
+			SettingsViewport.Update(_set, _hasMods);
+			SettingsHotspots.Ensure(_setsRect, close.transform);   // moves the unlock spot into the panel once the layout is known
 
 			bool needs = _hasMods && _bar != null && _bar.size < 0.995f;
 			float width = _bar != null ? Mathf.Max(8f, _bar.GetComponent<RectTransform>().rect.width) : 24f;
@@ -83,45 +80,6 @@ internal static class SettingsCloseShift {
 			if (r.rect.height > 100f && r.rect.height > r.rect.width * 2f) return b;
 		}
 		return null;
-	}
-
-	// ------------------------------------------------------------------ mouse wheel fallback
-
-	/// <summary>Every frame, from the runner. Returns at once unless a Settings tab with a visible scrollbar is open.</summary>
-	public static void Frame() {
-		if (_bar == null || _set == null || !_set.gameObject.activeInHierarchy || _bar.size >= 0.995f) return;
-		try {
-			var mouse = Mouse.current;
-			if (mouse == null) return;
-
-			if (_wait > 0 && --_wait == 0) {
-				_nativeScrolls = Mathf.Abs(_bar.value - _before) > 0.0001f;
-				UiLog.Info("settings: mouse wheel " + (_nativeScrolls == true ? "scrolls natively" : "does not scroll natively - UiKit drives the scrollbar"));
-				if (_nativeScrolls == false) Apply(_pendingDelta);
-			}
-
-			float dy = mouse.scroll.ReadValue().y;
-			if (dy == 0f || _nativeScrolls == true || _wait > 0) return;
-			if (!PointerOverSettings(mouse.position.ReadValue())) return;
-
-			if (_nativeScrolls == false) { Apply(dy); return; }
-			_before = _bar.value;
-			_pendingDelta = dy;
-			_wait = 3;   // give the game's own handler a few frames to react
-		}
-		catch (Exception e) { UiLog.Once("wheel", "settings mouse wheel: " + e.Message); }
-	}
-
-	private static bool PointerOverSettings(Vector2 screenPoint) {
-		if (_setsRect == null) return false;
-		Camera cam = _canvas != null && _canvas.renderMode != RenderMode.ScreenSpaceOverlay ? _canvas.worldCamera : null;
-		return RectTransformUtility.RectangleContainsScreenPoint(_setsRect, screenPoint, cam);
-	}
-
-	private static void Apply(float delta) {
-		float step = Mathf.Clamp(_bar.size * 0.25f, 0.02f, 0.2f) * Mathf.Sign(delta);
-		if (_bar.direction == Scrollbar.Direction.TopToBottom) step = -step;
-		_bar.value = Mathf.Clamp01(_bar.value + step);
 	}
 
 	// ------------------------------------------------------------------ diagnostics

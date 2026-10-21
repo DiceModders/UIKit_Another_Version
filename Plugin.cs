@@ -209,6 +209,7 @@ public class Plugin : BasePlugin {
     internal static BepInEx.Configuration.ConfigEntry<bool> DemoEnabled;
     internal static BepInEx.Configuration.ConfigEntry<int> DemoExtraRows;
     internal static BepInEx.Configuration.ConfigEntry<bool> DumpWindows;
+    internal static BepInEx.Configuration.ConfigEntry<bool> ShowInvisible;
     internal static BepInEx.Configuration.ConfigEntry<bool> DemoRulesScoreboard;
 
     public override void Load() {
@@ -217,6 +218,7 @@ public class Plugin : BasePlugin {
 		DemoExtraRows = Config.Bind("Demo", "ExtraRows", 0, "Adds this many extra toggle rows to the demo settings block (to test scrolling and the Close button shift).");
 		DemoRulesScoreboard = Config.Bind("Demo", "RulesAndScoreboard", false, "With the demo on: adds a scoreboard column and a fake civilization to the Rules drop-down (the fake civilization may break skins/colours when selected).");
 		DumpWindows = Config.Bind("Debug", "DumpWindows", false, "Writes the object tree of the game's own windows to the log (for developers).");
+		ShowInvisible = Config.Bind("Debug", "ShowInvisible", false, "Draws the invisible things UiKit adds (hidden click spots in red, the scroll catcher in green) so you can see where they are. Takes effect the next time a screen is opened.");
 		UiKit.Init();
 		if (DemoEnabled.Value) InterfaceAwakePatch.RegisterDemoExtras();
 		var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);

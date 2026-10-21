@@ -33,7 +33,7 @@ internal sealed class UiKitRunner : MonoBehaviour {
 	public void Update() {
 		TextWrap.Frame();             // per frame; a few labels at most
 		PointerTracker.Frame();       // per frame, but returns at once when no image / scroll view exists
-		SettingsCloseShift.Frame();   // per frame, but returns at once unless a Settings tab with a scrollbar is open
+		SettingsHotspots.Frame();   // per frame, returns at once unless the mouse was pressed over a hotspot
 		float now = Time.unscaledTime;
 		if (now < _next) return;
 		_next = now + 0.25f;

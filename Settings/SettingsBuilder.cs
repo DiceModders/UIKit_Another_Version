@@ -75,9 +75,9 @@ internal static class SettingsBuilder {
 		label.enableWordWrapping = true;
 		var rt = label.rectTransform;
 		rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-		rt.offsetMin = new Vector2(ContentLeft, 0f); rt.offsetMax = Vector2.zero;
+		rt.offsetMin = new Vector2(ContentLeft, 0f); rt.offsetMax = new Vector2(-ScrollbarReserve, 0f);   // keep clear of the scrollbar
 
-		float width = (holder.rect.width > 50f ? holder.rect.width : 420f) - ContentLeft;
+		float width = ColumnWidth(holder) - ContentLeft;   // ColumnWidth already excludes the scrollbar
 		float height = label.GetPreferredValues(text ?? "", width, 0f).y + 8f;
 		var le = entry.GetComponent<LayoutElement>() ?? entry.gameObject.AddComponent<LayoutElement>();
 		le.minHeight = Mathf.Max(le.minHeight, height);
@@ -104,6 +104,9 @@ internal static class SettingsBuilder {
 		if (entry == null) return;
 		var holder = entry.contentHolder;
 		EnsureRow(holder);
+		// every button gets at most an equal share of the column (minus the scrollbar), so nothing ever runs under it; longer texts shrink to fit
+		int count = Mathf.Max(1, buttons.Length);
+		float share = (ColumnWidth(holder) - ContentLeft - RowSpacing * (count - 1)) / count;
 		foreach (var (text, onClick) in buttons) {
 			var click = onClick;
 			var b = NativeButton.CreateLabel(holder, name + " " + text, text, 16f, () => {
@@ -111,7 +114,9 @@ internal static class SettingsBuilder {
 				catch (Exception e) { UiLog.Error($"settings button '{text}': {e}"); }
 			});
 			if (b == null) { UiLog.Once("settings:button", "settings: no native text button template found"); continue; }
-			b.SetSize(Mathf.Max(80f, 14f * (text?.Length ?? 0) + 24f), NativeButton.Height);
+			float natural = Mathf.Max(80f, 14f * (text?.Length ?? 0) + 24f);
+			b.SetSize(Mathf.Min(natural, share), NativeButton.Height);
+			if (b.Text != null) { b.Text.enableAutoSizing = true; b.Text.fontSizeMin = 10f; b.Text.fontSizeMax = 16f; b.Text.enableWordWrapping = false; b.Text.overflowMode = TextOverflowModes.Ellipsis; }
 		}
 		Rebuild(set);
 	}
@@ -132,6 +137,15 @@ internal static class SettingsBuilder {
 
 		NativeButton.CreateLabel(holder, name + " Plus", "+", 20f, () => { Step(step, +1); value.text = SafeText(valueText); })?.SetSize(StepButtonWidth, NativeButton.Height);
 		Rebuild(set);
+	}
+
+	private const float RowSpacing = 6f;
+	private const float ScrollbarReserve = 24f;   // the game's vertical scrollbar sits at the right edge of the column
+
+	/// <summary>Usable width of a content column: its width minus the scrollbar (falls back to the native 500 when the layout has not run yet).</summary>
+	private static float ColumnWidth(RectTransform holder) {
+		float w = holder != null && holder.rect.width > 50f ? holder.rect.width : 500f;
+		return w - ScrollbarReserve;
 	}
 
 	private static void Step(Action<int> step, int delta) {
@@ -166,8 +180,17 @@ internal static class SettingsBuilder {
 		h.childAlignment = TextAnchor.MiddleLeft;   // the game's own controls start at the left edge of the content column
 		h.childControlWidth = false; h.childControlHeight = false;
 		h.childForceExpandWidth = false; h.childForceExpandHeight = false;
-		h.spacing = 6f;
+		h.spacing = RowSpacing;
 		h.padding = new RectOffset((int)ContentLeft, 0, 0, 0);
+	}
+
+	/// <summary>An empty row at the end of a tab, as tall as the game's Close button, so the last row can be scrolled clear of it.</summary>
+	public static void AddBottomSpacer(GameSetInterface set, float height) {
+		var rt = UiFactory.NewRect("DM Settings Spacer", set.holder);
+		var le = rt.gameObject.AddComponent<LayoutElement>();
+		le.minHeight = le.preferredHeight = height;
+		le.flexibleWidth = 0f;
+		Rebuild(set);
 	}
 
 	private static void Rebuild(GameSetInterface set) {
